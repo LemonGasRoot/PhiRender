@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context, Result};
 use macroquad::{file::set_pc_assets_folder, prelude::*};
 use prpr::{
     chart_video::{ChartVideoRenderer, VideoEncoder, VideoOptions},
-    core::{BOLD_FONT, PGR_FONT},
+    core::{BOLD_FONT, HUD_INFO_FONT, PGR_FONT},
     ext::poll_future,
     ui::{FontArc, TextPainter},
 };
@@ -305,7 +305,10 @@ async fn run() -> Result<()> {
     let font = read_font(&font_path)?;
     let mut gameplay_font = TextPainter::new(font, Some(fallback.clone()));
     gameplay_font.normalize_to(&reference_font);
-    PGR_FONT.with(|slot| *slot.borrow_mut() = Some(gameplay_font));
+    HUD_INFO_FONT.with(|slot| *slot.borrow_mut() = Some(gameplay_font));
+    PGR_FONT.with(|slot| {
+        *slot.borrow_mut() = Some(TextPainter::new(reference_font, Some(fallback.clone())))
+    });
     let bold = read_font(&assets.join("bold.ttf"))?;
     BOLD_FONT.with(|slot| *slot.borrow_mut() = Some(TextPainter::new(bold, Some(fallback))));
     if std::env::var_os("PHIRA_FFMPEG").is_none() {

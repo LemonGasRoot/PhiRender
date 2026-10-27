@@ -909,6 +909,19 @@ index 5c6a491..74723cb 100644
              };
              let begin = (at * HITSOUND_RATE as f64).round() as usize;
              let len = (clip.length() * HITSOUND_RATE as f64).ceil() as usize;
+diff --git a/prpr/src/core.rs b/prpr/src/core.rs
+index 212c8cd..93edf72 100644
+--- a/prpr/src/core.rs
++++ b/prpr/src/core.rs
+@@ -86,6 +86,8 @@ use std::cell::RefCell;
+ 
+ thread_local! {
+     pub static PGR_FONT: RefCell<Option<TextPainter>> = RefCell::default();
++    /// Optional font for the song title and difficulty shown at the bottom.
++    pub static HUD_INFO_FONT: RefCell<Option<TextPainter>> = RefCell::default();
+     pub static BOLD_FONT: RefCell<Option<TextPainter>> = RefCell::default();
+ }
+ 
 diff --git a/prpr/src/core/block.rs b/prpr/src/core/block.rs
 index 275791d..5e32846 100644
 --- a/prpr/src/core/block.rs
@@ -1467,35 +1480,27 @@ index e4c6e22..7d4eb51 100644
                      if self.pitch != p {
                          self.primed = false;
 diff --git a/prpr/src/scene/game.rs b/prpr/src/scene/game.rs
-index 4e87bc5..267dcc0 100644
+index 4e87bc5..3dddd27 100644
 --- a/prpr/src/scene/game.rs
 +++ b/prpr/src/scene/game.rs
-@@ -1301,7 +1301,7 @@ impl GameScene {
-                         });
-                 } else {
-                     let combo = displayed_combo.to_string();
--                    let ct = ui.text(&combo).size(1.0).measure().center();
-+                    let ct = ui.text(&combo).size(1.0).measure_using(&PGR_FONT).center();
-                     let combo_y = top + eps * 2. - (1. - p) * 0.4 + ct.y;
-                     let btm = self.chart.with_element(ui, res, UIElement::ComboNumber, None, (0., combo_y), |ui, c| {
-                         ui.text(&combo)
-@@ -1312,7 +1312,7 @@ impl GameScene {
-                             .draw_using(&PGR_FONT)
-                             .bottom()
-                     });
--                    let ct = ui.text("COMBO").size(0.4).measure().center();
-+                    let ct = ui.text("COMBO").size(0.4).measure_using(&PGR_FONT).center();
-                     let combo_top = btm + 0.01 + ct.y;
-                     self.chart.with_element(ui, res, UIElement::Combo, None, (0., combo_top), |ui, c| {
-                         ui.text(combo_label(&res.config))
-@@ -1352,26 +1352,27 @@ impl GameScene {
+@@ -27,7 +27,7 @@ use crate::practice::{
+ use crate::{
+     bin::BinaryReader,
+     config::{Config, Mods},
+-    core::{copy_fbo, BadNote, Chart, ChartExtra, Effect, JudgeLineKind, Matrix, NoteKind, Point, Resource, UIElement, Vector, PGR_FONT},
++    core::{copy_fbo, BadNote, Chart, ChartExtra, Effect, JudgeLineKind, Matrix, NoteKind, Point, Resource, UIElement, Vector, HUD_INFO_FONT, PGR_FONT},
+     ext::{parse_time, screen_aspect, semi_white, spawn_task, RectExt, SafeTexture, ScaleType},
+     fs::FileSystem,
+     info::{ChartFormat, ChartInfo},
+@@ -1352,26 +1352,28 @@ impl GameScene {
              ui.text("").draw_using(&PGR_FONT);
              let lf = -1. + margin;
              let bt = -top - eps * 2.8 + (1. - p) * 0.4;
 +            let info_text_size = 0.7;
++            let info_font = if HUD_INFO_FONT.with(|font| font.borrow().is_some()) { &HUD_INFO_FONT } else { &PGR_FONT };
              let scale_point = legacy_aui.then(|| {
 -                let ct = ui.text(&res.info.name).size(0.5).measure().center();
-+                let ct = ui.text(&res.info.name).size(info_text_size).measure_using(&PGR_FONT).center();
++                let ct = ui.text(&res.info.name).size(info_text_size).measure_using(info_font).center();
                  (lf + ct.x, bt - ct.y)
              });
              self.chart.with_element(ui, res, UIElement::Name, scale_point, (lf, bt), |ui, c| {
@@ -1507,17 +1512,17 @@ index 4e87bc5..267dcc0 100644
                      .color(c)
                      .max_width(0.8)
 -                    .draw();
-+                    .draw_using(&PGR_FONT);
++                    .draw_using(info_font);
              });
  
              let scale_point = legacy_aui.then(|| {
 -                let ct = ui.text(&res.info.level).size(0.5).measure().center();
-+                let ct = ui.text(&res.info.level).size(info_text_size).measure_using(&PGR_FONT).center();
++                let ct = ui.text(&res.info.level).size(info_text_size).measure_using(info_font).center();
                  (-lf - ct.x, bt - ct.y)
              });
              self.chart.with_element(ui, res, UIElement::Level, scale_point, (-lf, bt), |ui, c| {
 -                ui.text(&res.info.level).pos(-lf, bt).anchor(1., 1.).size(0.5).color(c).draw();
-+                ui.text(&res.info.level).pos(-lf, bt).anchor(1., 1.).size(info_text_size).color(c).draw_using(&PGR_FONT);
++                ui.text(&res.info.level).pos(-lf, bt).anchor(1., 1.).size(info_text_size).color(c).draw_using(info_font);
              });
  
              let hw = 0.003;
