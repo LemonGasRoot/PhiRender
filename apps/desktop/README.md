@@ -39,12 +39,14 @@ npm ci
 npm run build
 cd ../..
 cargo build --release --bin phirender-gpu-worker
-cargo build --release --manifest-path apps/desktop/src-tauri/Cargo.toml
+cargo build --release --features custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml
 ```
 
 Put `phirender-desktop.exe` and `phirender-gpu-worker.exe` together. Put the
 optional `saira-regular.ttf` and its OFL notice next to them for the default
-gameplay font. On this development machine the program finds the existing
+gameplay font. The GNU Windows build also needs the matching x64
+`WebView2Loader.dll` beside the desktop executable and an installed WebView2
+Runtime. On this development machine the program finds the existing
 `work/Phira-Pro/assets` and FFmpeg in the project tree. It is therefore a
 development build rather than a fully portable public distribution. Custom
 skins and fonts are read from the selected paths and are not included in the
