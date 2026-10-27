@@ -10,8 +10,10 @@ wrapper around the command-line renderer.
 ## Current capabilities
 
 - Open official, RPE and RPEN JSON/PEZ and display conversion diagnostics.
-- Generate a GPU-rendered still frame at a chosen timestamp. The frame crosses
-  GPU to CPU and then the local application IPC; this is not zero-copy video.
+- Automatically generate a playable full-chart 720p/30 FPS preview video on
+  import, or turn automatic generation off and start it manually. The preview
+  uses the same GPU drawing and encoding path as video export; GPU frames are
+  read back before encoding. Playback starts after generation completes.
 - Export MP4 in a background GPU worker using the existing FFmpeg software or
   NVENC encoder. Cancellation requests the worker to stop and remove its
   temporary output. Existing destination files are not overwritten.
@@ -24,9 +26,11 @@ wrapper around the command-line renderer.
   local `work/Phira-Pro/assets/respack`; the project's generated skin is not
   selected as the desktop default.
 
-The current preview is a seekable still frame. Real-time playback and audio
-monitoring in the new Tauri window are not implemented. The existing older
-GUI and CLI have not been removed.
+The generated video supports playback, pause, and seeking. Live rendering and
+audio monitoring during generation are not implemented. The existing older
+GUI and CLI have not been removed. NVIDIA NVENC is the default encoder; select
+software H.264 in settings if it is unavailable. On this development machine,
+the desktop backend uses the bundled FFmpeg 8 for NVENC compatibility.
 
 ## Build on Windows
 

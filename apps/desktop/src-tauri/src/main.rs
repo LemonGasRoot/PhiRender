@@ -15,7 +15,7 @@ use std::{
         Arc, Mutex,
     },
 };
-use tauri::State;
+use tauri::{Manager, State};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -36,6 +36,8 @@ struct Settings {
     height: u32,
     fps: u32,
     nvenc: bool,
+    auto_preview: bool,
+    settings_version: u32,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -53,7 +55,9 @@ impl Default for Settings {
             width: 1920,
             height: 1080,
             fps: 60,
-            nvenc: false,
+            nvenc: true,
+            auto_preview: true,
+            settings_version: 0,
         }
     }
 }
@@ -96,6 +100,7 @@ struct Inner {
     task: TaskView,
     stdin: Option<ChildStdin>,
     preview_path: Option<PathBuf>,
+    preview_video_path: Option<PathBuf>,
     music: Option<PathBuf>,
 }
 struct AppState(Arc<Mutex<Inner>>);
@@ -152,6 +157,10 @@ fn initial_state() -> Inner {
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default();
+    if settings.settings_version == 0 {
+        settings.nvenc = true;
+        settings.settings_version = 1;
+    }
     if settings.skin.is_none() {
         let phira = root.join("work/Phira-Pro/assets/respack");
         if phira.is_dir() {
@@ -167,7 +176,7 @@ fn initial_state() -> Inner {
             settings.font = Some(font.to_string_lossy().into_owned());
         }
     }
-    Inner {
+    let inner = Inner {
         root,
         cache,
         settings,
@@ -175,8 +184,11 @@ fn initial_state() -> Inner {
         task: TaskView::default(),
         stdin: None,
         preview_path: None,
+        preview_video_path: None,
         music: None,
-    }
+    };
+    let _ = write_settings(&inner);
+    inner
 }
 fn is_archive(path: &Path) -> bool {
     path.extension()
@@ -356,6 +368,9 @@ async fn open_chart(state: State<'_, AppState>) -> Result<Option<ChartView>, Str
         }
         inner.music = None;
         inner.preview_path = None;
+        if let Some(old) = inner.preview_video_path.take() {
+            let _ = std::fs::remove_file(old);
+        }
         inner.task = TaskView::default();
         Ok(Some(view))
     })
@@ -391,6 +406,9 @@ async fn attach_music(state: State<'_, AppState>) -> Result<Option<ChartView>, S
         }
         inner.music = Some(music);
         inner.preview_path = None;
+        if let Some(old) = inner.preview_video_path.take() {
+            let _ = std::fs::remove_file(old);
+        }
         Ok(Some(view))
     })
     .await
@@ -501,6 +519,18 @@ fn get_preview_frame(state: State<'_, AppState>) -> Result<Vec<u8>, String> {
         .ok_or("尚无预览画面")?;
     std::fs::read(path).map_err(msg)
 }
+#[tauri::command]
+fn get_preview_video(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+    let path = state
+        .0
+        .lock()
+        .unwrap()
+        .preview_video_path
+        .clone()
+        .ok_or("尚无预览视频")?;
+    app.asset_protocol_scope().allow_file(&path).map_err(msg)?;
+    Ok(path.to_string_lossy().into_owned())
+}
 fn worker_path() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(msg)?;
     let path = exe
@@ -528,7 +558,13 @@ fn start_task(
     }
     let id = unique();
     let dest = if kind == "preview" {
-        inner.cache.join(format!("preview-{id}.png"))
+        inner
+            .cache
+            .join(format!("preview-{}-{id}.png", std::process::id()))
+    } else if kind == "preview_video" {
+        inner
+            .cache
+            .join(format!("preview-{}-{id}.mp4", std::process::id()))
     } else {
         let final_path = output.as_ref().ok_or("没有选择输出文件")?;
         if final_path.exists() {
@@ -537,7 +573,7 @@ fn start_task(
         final_path.with_file_name(format!(".phirender-{}-{id}.mp4", std::process::id()))
     };
     let settings = &inner.settings;
-    let (width, height, fps) = if kind == "preview" {
+    let (width, height, fps) = if kind == "preview" || kind == "preview_video" {
         (1280, 720, 30)
     } else {
         (settings.width, settings.height, settings.fps)
@@ -559,7 +595,13 @@ fn start_task(
             p.is_file().then(|| p.to_string_lossy().into_owned())
         })
     };
-    let job = json!({"kind":kind,"chart":chart.prepared,"output":dest,"project_root":inner.root,"skin":settings.skin,"font":settings.font,
+    let worker_kind = if kind == "preview_video" {
+        "export"
+    } else {
+        kind
+    };
+    let using_nvenc = settings.nvenc;
+    let job = json!({"kind":worker_kind,"chart":chart.prepared,"output":dest,"project_root":inner.root,"skin":settings.skin,"font":settings.font,
         "width":width,"height":height,"fps":fps,"time":time.max(0.),"show_hud":settings.show_hud,"include_audio":settings.include_audio,
         "hitsounds":settings.hitsounds,"hitsound_volume":settings.hitsound_volume,"nvenc":settings.nvenc,
         "click_sound":sound_path(&settings.click_sound,"click"),"drag_sound":sound_path(&settings.drag_sound,"drag"),"flick_sound":sound_path(&settings.flick_sound,"flick")});
@@ -572,6 +614,14 @@ fn start_task(
         .stderr(Stdio::null())
         .env("TEMP", &inner.cache)
         .env("TMP", &inner.cache);
+    if settings.nvenc && std::env::var_os("PHIRA_FFMPEG").is_none() {
+        let compatible_ffmpeg = inner
+            .root
+            .join("work/ffmpeg-8.0.1-extracted/ffmpeg-8.0.1-essentials_build/bin/ffmpeg.exe");
+        if compatible_ffmpeg.is_file() {
+            cmd.env("PHIRA_FFMPEG", compatible_ffmpeg);
+        }
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -599,7 +649,12 @@ fn start_task(
             match v["type"].as_str().unwrap_or("") {
                 "progress" => {
                     inner.task.status = "running".into();
-                    inner.task.message = "正在导出视频".into();
+                    inner.task.message = if kind == "preview_video" {
+                        "正在生成 720p 预览视频"
+                    } else {
+                        "正在导出视频"
+                    }
+                    .into();
                     inner.task.frame = v["frame"].as_u64().unwrap_or(0);
                     inner.task.total = v["total"].as_u64().unwrap_or(0);
                     inner.task.elapsed = v["elapsed"].as_f64().unwrap_or(0.);
@@ -615,6 +670,15 @@ fn start_task(
                     inner.task.time = v["time"].as_f64().unwrap_or(0.);
                 }
                 "complete" => {
+                    if kind == "preview_video" {
+                        if let Some(old) = inner.preview_video_path.replace(dest.clone()) {
+                            let _ = std::fs::remove_file(old);
+                        }
+                        inner.task.status = "ready".into();
+                        inner.task.message = "预览视频已就绪".into();
+                        inner.task.output = Some(dest.to_string_lossy().into_owned());
+                        continue;
+                    }
                     let result =
                         output
                             .as_ref()
@@ -644,7 +708,14 @@ fn start_task(
                 }
                 "error" => {
                     inner.task.status = "error".into();
-                    inner.task.message = v["message"].as_str().unwrap_or("渲染失败").into();
+                    let error = v["message"].as_str().unwrap_or("渲染失败");
+                    inner.task.message = if using_nvenc {
+                        format!(
+                            "{error}。如果 NVIDIA 编码不可用，请在设置中选择软件 H.264 后重试。"
+                        )
+                    } else {
+                        error.into()
+                    };
                 }
                 _ => {}
             }
@@ -671,12 +742,81 @@ fn start_preview(state: State<'_, AppState>, time: f64) -> Result<(), String> {
     start_task(state.0.clone(), "preview", time, None)
 }
 #[tauri::command]
+fn start_preview_video(state: State<'_, AppState>) -> Result<(), String> {
+    start_task(state.0.clone(), "preview_video", 0., None)
+}
+
+fn output_filename(title: &str, level: &str) -> String {
+    fn clean(s: &str) -> String {
+        s.trim()
+            .chars()
+            .map(|c| {
+                if c.is_whitespace() || "<>:\"/\\|?*".contains(c) || c.is_control() {
+                    '_'
+                } else {
+                    c
+                }
+            })
+            .collect::<String>()
+            .trim_matches([' ', '.', '_'])
+            .to_owned()
+    }
+    let title = clean(title);
+    let title = if title.is_empty() {
+        "PhiRender"
+    } else {
+        &title
+    };
+    let level = level.replace("Lv.", "").replace("lv.", "").replace(' ', "");
+    let level = clean(&level);
+    let level = if !level.is_empty()
+        && level.chars().last().is_some_and(|c| c.is_ascii_digit())
+        && !level.contains('.')
+    {
+        format!("{level}.0")
+    } else {
+        level
+    };
+    if level.is_empty() {
+        format!("{title}.mp4")
+    } else {
+        format!("{title}_{level}.mp4")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn suggested_video_filename_uses_song_and_difficulty() {
+        assert_eq!(
+            output_filename("Desultory Signals", "IN Lv.17"),
+            "Desultory_Signals_IN17.0.mp4"
+        );
+        assert_eq!(output_filename("A/B: C", "EX Lv.15.7"), "A_B__C_EX15.7.mp4");
+        assert_eq!(output_filename("Song", ""), "Song.mp4");
+    }
+
+    #[test]
+    fn old_settings_get_new_preview_default() {
+        let settings: Settings = serde_json::from_str(r#"{"nvenc":false}"#).unwrap();
+        assert!(settings.auto_preview);
+        assert_eq!(settings.settings_version, 0);
+    }
+}
+#[tauri::command]
 async fn start_export(state: State<'_, AppState>) -> Result<(), String> {
     let shared = state.0.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let filename = {
+            let inner = shared.lock().unwrap();
+            let chart = inner.chart.as_ref().ok_or("请先打开谱面")?;
+            output_filename(&chart.view.title, &chart.view.level)
+        };
         let Some(path) = rfd::FileDialog::new()
             .add_filter("MP4 视频", &["mp4"])
-            .set_file_name("PhiRender.mp4")
+            .set_file_name(filename)
             .save_file()
         else {
             return Ok(());
@@ -775,7 +915,9 @@ fn main() {
             default_skin,
             get_task,
             get_preview_frame,
+            get_preview_video,
             start_preview,
+            start_preview_video,
             start_export,
             cancel_task,
             convert_chart
