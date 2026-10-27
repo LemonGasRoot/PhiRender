@@ -73,6 +73,9 @@ struct RenderArgs {
     /// Do not mix note hit sounds into the video.
     #[arg(long)]
     no_hitsound: bool,
+    /// Hit sound gain multiplier (0 to 8; defaults to 3).
+    #[arg(long, default_value_t = 3.0)]
+    hitsound_volume: f32,
     /// Export the video without the chart's music and hit sounds.
     #[arg(long)]
     no_audio: bool,
@@ -212,6 +215,7 @@ async fn run_inner(mode: RunMode) -> Result<()> {
         start: args.start,
         end: args.end,
         hitsound: !args.no_hitsound,
+        hitsound_volume: args.hitsound_volume,
         show_hud: !args.no_hud,
         show_accuracy: args.show_accuracy,
         show_offset_indicator: false,

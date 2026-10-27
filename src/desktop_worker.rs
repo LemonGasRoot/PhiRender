@@ -13,7 +13,6 @@ use serde_json::json;
 use std::{
     io::{BufRead, Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -139,11 +138,6 @@ impl SkinStage {
         self.files.push(path.clone());
         Ok(path)
     }
-    fn reserve(&mut self, name: &str) -> PathBuf {
-        let path = self.dir.join(name);
-        self.files.push(path.clone());
-        path
-    }
 }
 impl Drop for SkinStage {
     fn drop(&mut self) {
@@ -154,10 +148,10 @@ impl Drop for SkinStage {
     }
 }
 
-/// Build a temporary local resource pack; the renderer itself is unchanged.
+/// Build a temporary local resource pack with selected sound files unchanged.
 fn prepare_skin(job: &Job, assets: &Path) -> Result<SkinStage> {
-    if !job.hitsound_volume.is_finite() || !(0.0..=2.0).contains(&job.hitsound_volume) {
-        return Err(anyhow!("打击音音量必须在 0% 至 200% 之间"));
+    if !job.hitsound_volume.is_finite() || !(0.0..=8.0).contains(&job.hitsound_volume) {
+        return Err(anyhow!("打击音音量必须在 0 至 8 倍之间"));
     }
     let selected = job.skin.clone().unwrap_or_else(|| assets.join("respack"));
     let phira_default = selected == assets.join("respack");
@@ -188,11 +182,6 @@ fn prepare_skin(job: &Job, assets: &Path) -> Result<SkinStage> {
             break;
         }
     }
-    let gain = if job.kind == "preview" {
-        0.
-    } else {
-        job.hitsound_volume
-    };
     for (kind, override_path) in [
         ("click", &job.click_sound),
         ("drag", &job.drag_sound),
@@ -237,34 +226,7 @@ fn prepare_skin(job: &Job, assets: &Path) -> Result<SkinStage> {
         if !["ogg", "wav", "mp3"].contains(&ext.as_str()) {
             return Err(anyhow!("不支持的打击音格式：{ext}"));
         }
-        if (gain - 1.).abs() < f32::EPSILON {
-            stage.write(&format!("{kind}.{ext}"), &bytes)?;
-        } else {
-            let input = stage.write(&format!("input-{kind}.{ext}"), &bytes)?;
-            let output = stage.reserve(&format!("{kind}.wav"));
-            let program = std::env::var_os("PHIRA_FFMPEG")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("ffmpeg"));
-            let mut cmd = Command::new(program);
-            cmd.args(["-v", "error", "-nostdin", "-y", "-i"])
-                .arg(&input)
-                .args(["-af", &format!("volume={gain:.4}"), "-c:a", "pcm_s16le"])
-                .arg(&output)
-                .stdout(Stdio::null())
-                .stderr(Stdio::piped());
-            #[cfg(windows)]
-            {
-                use std::os::windows::process::CommandExt;
-                cmd.creation_flags(0x08000000);
-            }
-            let result = cmd.output().context("无法启动 FFmpeg 处理打击音")?;
-            if !result.status.success() {
-                return Err(anyhow!(
-                    "打击音处理失败：{}",
-                    String::from_utf8_lossy(&result.stderr)
-                ));
-            }
-        }
+        stage.write(&format!("{kind}.{ext}"), &bytes)?;
     }
     Ok(stage)
 }
@@ -333,6 +295,11 @@ async fn run() -> Result<()> {
         show_hud: job.show_hud,
         include_audio: job.include_audio,
         hitsound: job.hitsounds,
+        hitsound_volume: if job.kind == "preview" {
+            0.
+        } else {
+            job.hitsound_volume
+        },
         sample_count: 1,
         res_pack_path: Some(skin_stage.dir.clone()),
         encoder: if job.nvenc {
