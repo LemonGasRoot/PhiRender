@@ -10,6 +10,12 @@ does not stage or reset that checkout.
 - `untracked/`: previously untracked files that belong to this development
   checkout, including the separately licensed CC0 fallback skin.
 
+After deliberately editing that checkout, run
+`powershell -File tools/snapshot-phira.ps1` from the project root, inspect `git diff`, and commit
+the updated snapshot. Git in the parent repository cannot automatically
+restore files inside the separate checkout; the snapshot is restored using the
+fresh-checkout procedure below.
+
 For a fresh development checkout, clone the upstream repository at that exact
 commit into `work/Phira-Pro`, run `git apply --check` on the patch, then apply
 it and copy the contents of `untracked/` into the corresponding locations.

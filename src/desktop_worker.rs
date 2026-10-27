@@ -77,10 +77,18 @@ enum SkinSource {
 }
 impl SkinSource {
     fn open(path: &Path) -> Result<Self> {
-        if path.is_dir() { return Ok(Self::Directory(path.to_path_buf())); }
+        if path.is_dir() {
+            return Ok(Self::Directory(path.to_path_buf()));
+        }
         let mut zip = zip::ZipArchive::new(std::fs::File::open(path)?)?;
-        let info: Vec<_> = zip.file_names().filter(|n| n.rsplit('/').next() == Some("info.yml")).map(str::to_owned).collect();
-        if info.len() != 1 { return Err(anyhow!("皮肤 ZIP 必须包含一个 info.yml")); }
+        let info: Vec<_> = zip
+            .file_names()
+            .filter(|n| n.rsplit('/').next() == Some("info.yml"))
+            .map(str::to_owned)
+            .collect();
+        if info.len() != 1 {
+            return Err(anyhow!("皮肤 ZIP 必须包含一个 info.yml"));
+        }
         let prefix = info[0].strip_suffix("info.yml").unwrap_or("").to_owned();
         // Read once so an invalid or encrypted info file is reported early.
         let _ = zip.by_name(&info[0])?;
@@ -99,84 +107,163 @@ impl SkinSource {
                     Err(zip::result::ZipError::FileNotFound) => return Ok(None),
                     Err(e) => return Err(e.into()),
                 };
-                if entry.size() > 256 * 1024 * 1024 { return Err(anyhow!("皮肤资源过大: {name}")); }
-                let mut bytes = Vec::new(); entry.read_to_end(&mut bytes)?; Ok(Some(bytes))
+                if entry.size() > 256 * 1024 * 1024 {
+                    return Err(anyhow!("皮肤资源过大: {name}"));
+                }
+                let mut bytes = Vec::new();
+                entry.read_to_end(&mut bytes)?;
+                Ok(Some(bytes))
             }
         }
     }
 }
 
-struct SkinStage { dir: PathBuf, files: Vec<PathBuf> }
+struct SkinStage {
+    dir: PathBuf,
+    files: Vec<PathBuf>,
+}
 impl SkinStage {
     fn create() -> Result<Self> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-        let dir = std::env::temp_dir().join(format!("phirender-skin-{}-{stamp}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("phirender-skin-{}-{stamp}", std::process::id()));
         std::fs::create_dir(&dir)?;
-        Ok(Self { dir, files: Vec::new() })
+        Ok(Self {
+            dir,
+            files: Vec::new(),
+        })
     }
     fn write(&mut self, name: &str, bytes: &[u8]) -> Result<PathBuf> {
-        let path = self.dir.join(name); std::fs::write(&path, bytes)?; self.files.push(path.clone()); Ok(path)
+        let path = self.dir.join(name);
+        std::fs::write(&path, bytes)?;
+        self.files.push(path.clone());
+        Ok(path)
     }
     fn reserve(&mut self, name: &str) -> PathBuf {
-        let path = self.dir.join(name); self.files.push(path.clone()); path
+        let path = self.dir.join(name);
+        self.files.push(path.clone());
+        path
     }
 }
 impl Drop for SkinStage {
     fn drop(&mut self) {
-        for path in &self.files { let _ = std::fs::remove_file(path); }
+        for path in &self.files {
+            let _ = std::fs::remove_file(path);
+        }
         let _ = std::fs::remove_dir(&self.dir);
     }
 }
 
 /// Build a temporary local resource pack; the renderer itself is unchanged.
 fn prepare_skin(job: &Job, assets: &Path) -> Result<SkinStage> {
-    if !job.hitsound_volume.is_finite() || !(0.0..=2.0).contains(&job.hitsound_volume) { return Err(anyhow!("打击音音量必须在 0% 至 200% 之间")); }
+    if !job.hitsound_volume.is_finite() || !(0.0..=2.0).contains(&job.hitsound_volume) {
+        return Err(anyhow!("打击音音量必须在 0% 至 200% 之间"));
+    }
     let selected = job.skin.clone().unwrap_or_else(|| assets.join("respack"));
     let phira_default = selected == assets.join("respack");
-    let mut source = SkinSource::open(&selected).with_context(|| format!("无法打开皮肤 {}", selected.display()))?;
+    let mut source = SkinSource::open(&selected)
+        .with_context(|| format!("无法打开皮肤 {}", selected.display()))?;
     let mut stage = SkinStage::create()?;
-    for name in ["info.yml", "click.png", "click_mh.png", "drag.png", "drag_mh.png", "flick.png", "flick_mh.png", "hold.png", "hold_mh.png", "hit_fx.png"] {
-        let bytes = source.read(name)?.with_context(|| format!("皮肤缺少 {name}"))?;
+    for name in [
+        "info.yml",
+        "click.png",
+        "click_mh.png",
+        "drag.png",
+        "drag_mh.png",
+        "flick.png",
+        "flick_mh.png",
+        "hold.png",
+        "hold_mh.png",
+        "hit_fx.png",
+    ] {
+        let bytes = source
+            .read(name)?
+            .with_context(|| format!("皮肤缺少 {name}"))?;
         stage.write(name, &bytes)?;
     }
     for ext in ["ogg", "wav", "mp3"] {
         let name = format!("ending.{ext}");
-        if let Some(bytes) = source.read(&name)? { stage.write(&name, &bytes)?; break; }
+        if let Some(bytes) = source.read(&name)? {
+            stage.write(&name, &bytes)?;
+            break;
+        }
     }
-    let gain = if job.kind == "preview" { 0. } else { job.hitsound_volume };
-    for (kind, override_path) in [("click", &job.click_sound), ("drag", &job.drag_sound), ("flick", &job.flick_sound)] {
+    let gain = if job.kind == "preview" {
+        0.
+    } else {
+        job.hitsound_volume
+    };
+    for (kind, override_path) in [
+        ("click", &job.click_sound),
+        ("drag", &job.drag_sound),
+        ("flick", &job.flick_sound),
+    ] {
         let mut chosen: Option<(Vec<u8>, String)> = None;
         if let Some(path) = override_path {
-            let ext = path.extension().and_then(|v| v.to_str()).unwrap_or("ogg").to_ascii_lowercase();
-            chosen = Some((std::fs::read(path).with_context(|| format!("无法读取打击音 {}", path.display()))?, ext));
+            let ext = path
+                .extension()
+                .and_then(|v| v.to_str())
+                .unwrap_or("ogg")
+                .to_ascii_lowercase();
+            chosen = Some((
+                std::fs::read(path)
+                    .with_context(|| format!("无法读取打击音 {}", path.display()))?,
+                ext,
+            ));
         } else {
             for ext in ["ogg", "wav", "mp3"] {
-                if let Some(bytes) = source.read(&format!("{kind}.{ext}"))? { chosen = Some((bytes, ext.into())); break; }
+                if let Some(bytes) = source.read(&format!("{kind}.{ext}"))? {
+                    chosen = Some((bytes, ext.into()));
+                    break;
+                }
             }
             if chosen.is_none() && phira_default {
                 let file = assets.join(format!("{kind}.ogg"));
-                if file.is_file() { chosen = Some((std::fs::read(file)?, "ogg".into())); }
+                if file.is_file() {
+                    chosen = Some((std::fs::read(file)?, "ogg".into()));
+                }
             }
             if chosen.is_none() {
                 for ext in ["ogg", "wav", "mp3"] {
                     let file = assets.join("respack-open").join(format!("{kind}.{ext}"));
-                    if file.is_file() { chosen = Some((std::fs::read(file)?, ext.into())); break; }
+                    if file.is_file() {
+                        chosen = Some((std::fs::read(file)?, ext.into()));
+                        break;
+                    }
                 }
             }
         }
         let (bytes, ext) = chosen.with_context(|| format!("未找到 {kind} 打击音"))?;
-        if !["ogg", "wav", "mp3"].contains(&ext.as_str()) { return Err(anyhow!("不支持的打击音格式：{ext}")); }
+        if !["ogg", "wav", "mp3"].contains(&ext.as_str()) {
+            return Err(anyhow!("不支持的打击音格式：{ext}"));
+        }
         if (gain - 1.).abs() < f32::EPSILON {
             stage.write(&format!("{kind}.{ext}"), &bytes)?;
         } else {
             let input = stage.write(&format!("input-{kind}.{ext}"), &bytes)?;
             let output = stage.reserve(&format!("{kind}.wav"));
-            let program = std::env::var_os("PHIRA_FFMPEG").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("ffmpeg"));
+            let program = std::env::var_os("PHIRA_FFMPEG")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("ffmpeg"));
             let mut cmd = Command::new(program);
-            cmd.args(["-v", "error", "-nostdin", "-y", "-i"]).arg(&input).args(["-af", &format!("volume={gain:.4}"), "-c:a", "pcm_s16le"]).arg(&output).stdout(Stdio::null()).stderr(Stdio::piped());
-            #[cfg(windows)] { use std::os::windows::process::CommandExt; cmd.creation_flags(0x08000000); }
+            cmd.args(["-v", "error", "-nostdin", "-y", "-i"])
+                .arg(&input)
+                .args(["-af", &format!("volume={gain:.4}"), "-c:a", "pcm_s16le"])
+                .arg(&output)
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped());
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
             let result = cmd.output().context("无法启动 FFmpeg 处理打击音")?;
-            if !result.status.success() { return Err(anyhow!("打击音处理失败：{}", String::from_utf8_lossy(&result.stderr))); }
+            if !result.status.success() {
+                return Err(anyhow!(
+                    "打击音处理失败：{}",
+                    String::from_utf8_lossy(&result.stderr)
+                ));
+            }
         }
     }
     Ok(stage)
@@ -210,12 +297,15 @@ async fn run() -> Result<()> {
     set_pc_assets_folder(assets.to_string_lossy().as_ref());
     let fallback = read_font(&assets.join("harmonyos.ttf"))?;
     let mut painter = TextPainter::new(fallback.clone(), None);
+    let reference_font = read_font(&assets.join("phigros.ttf"))?;
     let font_path = job
         .font
         .clone()
         .unwrap_or_else(|| assets.join("phigros.ttf"));
     let font = read_font(&font_path)?;
-    PGR_FONT.with(|slot| *slot.borrow_mut() = Some(TextPainter::new(font, Some(fallback.clone()))));
+    let mut gameplay_font = TextPainter::new(font, Some(fallback.clone()));
+    gameplay_font.normalize_to(&reference_font);
+    PGR_FONT.with(|slot| *slot.borrow_mut() = Some(gameplay_font));
     let bold = read_font(&assets.join("bold.ttf"))?;
     BOLD_FONT.with(|slot| *slot.borrow_mut() = Some(TextPainter::new(bold, Some(fallback))));
     if std::env::var_os("PHIRA_FFMPEG").is_none() {
@@ -266,8 +356,15 @@ async fn run() -> Result<()> {
         let mut t = (end - 1.).max(0.);
         renderer.render_preview_at(&mut painter, t)?;
         // Let old effects expire without modifying the shared rendering engine.
-        if t > 0. { for _ in 0..job.fps { renderer.render_preview_at(&mut painter, t)?; } }
-        while t < end { t = (t + 1. / f64::from(job.fps)).min(end); renderer.render_preview_at(&mut painter, t)?; }
+        if t > 0. {
+            for _ in 0..job.fps {
+                renderer.render_preview_at(&mut painter, t)?;
+            }
+        }
+        while t < end {
+            t = (t + 1. / f64::from(job.fps)).min(end);
+            renderer.render_preview_at(&mut painter, t)?;
+        }
         renderer
             .texture()
             .get_texture_data()
