@@ -1,0 +1,5 @@
+* text=auto
+*.patch -text
+*.png binary
+*.ico binary
+*.mp3 binary

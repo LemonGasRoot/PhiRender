@@ -1,0 +1,66 @@
+[package]
+name = "phigros-rpen-converter"
+version = "0.1.0"
+edition = "2021"
+description = "Convert official Phigros v3 charts to RPEN-compatible JSON and PEZ"
+license = "PolyForm-Noncommercial-1.0.0"
+
+[features]
+default = ["render"]
+render = ["dep:macroquad", "dep:prpr", "dep:rfd", "dep:tokio"]
+
+[lib]
+name = "phigros_rpen_converter"
+path = "src/lib.rs"
+
+[[bin]]
+name = "phigros-rpen"
+path = "src/main.rs"
+
+[[bin]]
+name = "phigros-render-gui"
+path = "src/gui.rs"
+required-features = ["render"]
+
+[[bin]]
+name = "phigros-render-cli"
+path = "src/render_cli.rs"
+required-features = ["render"]
+
+[[bin]]
+name = "phigros-render-pure"
+path = "src/render_pure_cli.rs"
+required-features = ["render"]
+
+[[bin]]
+name = "phirender-gpu-worker"
+path = "src/desktop_worker.rs"
+required-features = ["render"]
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+anyhow = "1"
+macroquad = { git = "https://github.com/Phira-Pro/prpr-macroquad", rev = "8d617ff60dd0c6c1d237e5c26ecde16e2ed0c72e", default-features = false, optional = true }
+prpr = { path = "work/Phira-Pro/prpr", default-features = false, optional = true }
+rfd = { version = "0.17.2", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1

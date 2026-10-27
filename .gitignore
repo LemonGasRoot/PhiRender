@@ -1,0 +1,14 @@
+# Source samples, rendered media and user-provided resources are local data.
+/outputs/
+/work/
+/target/
+
+# Reproducible build output and local application state.
+/apps/desktop/node_modules/
+/apps/desktop/dist/
+/apps/desktop/src-tauri/target/
+/apps/desktop/src-tauri/gen/
+**/phirender-cache/
+
+*.tmp
+*.log

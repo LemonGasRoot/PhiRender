@@ -1,0 +1,1494 @@
+diff --git a/phira/src/client/model.rs b/phira/src/client/model.rs
+index a267d47..3a94f3d 100644
+--- a/phira/src/client/model.rs
++++ b/phira/src/client/model.rs
+@@ -16,7 +16,7 @@ pub use record::*;
+ mod user;
+ pub use user::*;
+ 
+-use super::{basic_client_builder, api_url, Client, CLIENT_TOKEN};
++use super::{api_url, basic_client_builder, Client, CLIENT_TOKEN};
+ use crate::{
+     dir, get_data,
+     images::{THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH},
+diff --git a/phira/src/hud.rs b/phira/src/hud.rs
+index 5a56381..b9037d7 100644
+--- a/phira/src/hud.rs
++++ b/phira/src/hud.rs
+@@ -98,7 +98,13 @@ impl SlotDef {
+ 
+     /// 以某个锚点为参考的槽位。
+     pub const fn at(key: &'static str, anchor: Anchor, offset: [f32; 2], size: [f32; 2], cap: Cap) -> Self {
+-        Self { key, anchor, offset, size, cap }
++        Self {
++            key,
++            anchor,
++            offset,
++            size,
++            cap,
++        }
+     }
+ 
+     fn default_rect(self, ui: &Ui) -> Rect {
+@@ -170,7 +176,12 @@ impl IsolatedTestLayout {
+     pub(crate) fn saved_path(&self) -> std::path::PathBuf {
+         let saved = std::path::PathBuf::from(path().unwrap());
+         assert!(
+-            saved.parent().unwrap().canonicalize().unwrap().starts_with(self.directory.path().canonicalize().unwrap()),
++            saved
++                .parent()
++                .unwrap()
++                .canonicalize()
++                .unwrap()
++                .starts_with(self.directory.path().canonicalize().unwrap()),
+             "HUD test must save inside its temporary directory"
+         );
+         saved
+@@ -915,7 +926,14 @@ impl Editor {
+         for (i, label) in page_labels.into_iter().enumerate() {
+             let r = Rect::new(x, y, w, h);
+             let active = cur_page() == PageId::ALL[i];
+-            ui.fill_path(&r.rounded(radius), if active { Color::new(1., 0.8, 0.3, 0.95) } else { Color::new(0., 0., 0., 0.6) });
++            ui.fill_path(
++                &r.rounded(radius),
++                if active {
++                    Color::new(1., 0.8, 0.3, 0.95)
++                } else {
++                    Color::new(0., 0., 0., 0.6)
++                },
++            );
+             ui.text(label)
+                 .pos(r.x + r.w / 2., r.y + r.h / 2.)
+                 .anchor(0.5, 0.5)
+@@ -976,13 +994,7 @@ impl Editor {
+             items.push((BTN_ROWH_DEC, format!("{} -", tl!("hud-row-h"))));
+             items.push((BTN_ROWH_INC, format!("{} +", tl!("hud-row-h"))));
+             let readout = if page == "library" {
+-                format!(
+-                    "{} {}   {} {:.2}",
+-                    tl!("hud-cols"),
+-                    param("library", "cols", 4.).round() as i32,
+-                    tl!("hud-row-h"),
+-                    rh
+-                )
++                format!("{} {}   {} {:.2}", tl!("hud-cols"), param("library", "cols", 4.).round() as i32, tl!("hud-row-h"), rh)
+             } else {
+                 format!("{} {:.2}", tl!("hud-row-h"), rh)
+             };
+@@ -1026,7 +1038,14 @@ impl Editor {
+             for i in 0..tab_count {
+                 let r = Rect::new(bx, by, bw, bh);
+                 let active = i == tab_sel;
+-                ui.fill_path(&r.rounded(0.014), if active { Color::new(1., 0.8, 0.3, 0.95) } else { Color::new(0., 0., 0., 0.6) });
++                ui.fill_path(
++                    &r.rounded(0.014),
++                    if active {
++                        Color::new(1., 0.8, 0.3, 0.95)
++                    } else {
++                        Color::new(0., 0., 0., 0.6)
++                    },
++                );
+                 ui.text(format!("{}", i + 1))
+                     .pos(r.x + r.w / 2., r.y + r.h / 2.)
+                     .anchor(0.5, 0.5)
+diff --git a/phira/src/lib.rs b/phira/src/lib.rs
+index 9faae87..54b339c 100644
+--- a/phira/src/lib.rs
++++ b/phira/src/lib.rs
+@@ -80,8 +80,8 @@ use jni::{
+ 
+ static MESSAGES_TX: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
+ static DATA_PATH: Mutex<Option<String>> = Mutex::new(None);
+-pub(crate) mod updates;
+ pub(crate) mod songpacks;
++pub(crate) mod updates;
+ static CACHE_DIR: Mutex<Option<String>> = Mutex::new(None);
+ pub static mut DATA: Option<Data> = None;
+ 
+diff --git a/phira/src/page/course/presentation.rs b/phira/src/page/course/presentation.rs
+index 399e0ca..79eb026 100644
+--- a/phira/src/page/course/presentation.rs
++++ b/phira/src/page/course/presentation.rs
+@@ -167,11 +167,13 @@ pub(super) fn results(ui: &mut Ui, assets: &mut Assets, stages: &[Stage], aborte
+         let label_size = labels
+             .iter()
+             .map(|s| fit_size(ui, s, card_h * 0.10, column_w - 0.008))
+-            .fold(f32::INFINITY, f32::min) * 0.9;
++            .fold(f32::INFINITY, f32::min)
++            * 0.9;
+         let count_size = counts
+             .iter()
+             .map(|s| fit_size(ui, s, card_h * 0.16, column_w - 0.008))
+-            .fold(f32::INFINITY, f32::min) * 0.9;
++            .fold(f32::INFINITY, f32::min)
++            * 0.9;
+         for (j, (label, count)) in labels.iter().zip(&counts).enumerate() {
+             let x = stats_x + column_w * (j as f32 + 0.5);
+             text_draw(ui, count, vec2(x, r.y + card_h * 0.67), vec2(0.5, 0.5), count_size, WHITE);
+diff --git a/phira/src/page/favorites.rs b/phira/src/page/favorites.rs
+index b1ab1a6..01cd584 100644
+--- a/phira/src/page/favorites.rs
++++ b/phira/src/page/favorites.rs
+@@ -1197,13 +1197,7 @@ impl Page for FavoritesPage {
+             }
+ 
+             // HUD 自定义：文件夹网格区域（整体移动 / 缩放；列数随宽度自动变化）。
+-            let grid = crate::hud::slot_or(
+-                ui,
+-                "favorites",
+-                "grid",
+-                crate::hud::Cap(true, true, true),
+-                Rect::new(-1., top, 2., content_h),
+-            );
++            let grid = crate::hud::slot_or(ui, "favorites", "grid", crate::hud::Cap(true, true, true), Rect::new(-1., top, 2., content_h));
+             self.scroll.size((grid.w, grid.h));
+ 
+             ui.scope(|ui| {
+diff --git a/phira/src/page/render.rs b/phira/src/page/render.rs
+index 625ee76..e5dae43 100644
+--- a/phira/src/page/render.rs
++++ b/phira/src/page/render.rs
+@@ -8,7 +8,7 @@ use crate::{dir, get_data};
+ use anyhow::{Context, Result};
+ use macroquad::{prelude::*, window::get_internal_gl};
+ use prpr::{
+-    chart_video::{ChartVideoRenderer, VideoOptions},
++    chart_video::{ChartVideoRenderer, VideoEncoder, VideoOptions},
+     ext::{semi_black, RectExt},
+     scene::{show_error, show_message},
+     ui::{DRectButton, Scroll, Ui},
+@@ -252,7 +252,12 @@ impl RenderPage {
+             end: None,
+             hitsound: self.prefs.hitsound,
+             show_hud: self.prefs.hud,
++            show_accuracy: self.prefs.hud,
++            show_offset_indicator: true,
++            include_audio: true,
+             sample_count: get_data().config.sample_count.max(1),
++            encoder: VideoEncoder::default(),
++            res_pack_path: get_data().selected_respack_path()?.map(PathBuf::from),
+         };
+         self.job = Job::Loading(Box::pin(ChartVideoRenderer::new(chart, opts, out)));
+         Ok(())
+diff --git a/phira/src/page/settings/judgement.rs b/phira/src/page/settings/judgement.rs
+index 4928243..1d889b4 100644
+--- a/phira/src/page/settings/judgement.rs
++++ b/phira/src/page/settings/judgement.rs
+@@ -240,7 +240,7 @@ impl JudgementList {
+             color_task: Some(Box::pin(async {
+                 let mut fs = match get_data().config.res_pack_path.clone() {
+                     Some(path) => prpr::fs::fs_from_file(std::path::Path::new(&path))?,
+-                    None => prpr::fs::fs_from_assets("respack/")?,
++                    None => prpr::fs::fs_from_assets("respack-open/")?,
+                 };
+                 let info: prpr::core::ResPackInfo = serde_yaml::from_slice(&fs.load_file("info.yml").await?)?;
+                 let hex = |c: Color| ((c.r * 255.).round() as u32) << 16 | ((c.g * 255.).round() as u32) << 8 | (c.b * 255.).round() as u32;
+diff --git a/phira/src/ppsr_features.rs b/phira/src/ppsr_features.rs
+index 646909e..fb3d490 100644
+--- a/phira/src/ppsr_features.rs
++++ b/phira/src/ppsr_features.rs
+@@ -20,19 +20,72 @@ pub const AUGMENTED_FEATURE_COUNT: usize = 7;
+ pub const MODEL_FEATURE_COUNT: usize = BASE_FEATURE_COUNT + V2_FEATURE_COUNT + AUGMENTED_FEATURE_COUNT;
+ 
+ pub const V2_FEATURE_NAMES: [&str; V2_FEATURE_COUNT] = [
+-    "h_holdCount", "h_holdPerSec", "h_holdLenMean", "h_holdLenP90", "h_holdLenMax", "h_holdConcurrentMax",
+-    "h_holdConcurrentMean", "h_holdConcurrentP90", "h_holdBusyRatio", "h_holdMultiRatio", "h_holdTripleRatio",
+-    "h_holdStartChordMax", "h_holdReleasePerSec", "h_holdReleaseChordMax", "h_holdTapDuringRatio",
+-    "h_holdTapOverlapMax", "h_holdMoveRatio", "h_holdMoveSpeedP95", "h_holdMoveSpeedMax", "h_holdPathPerSec",
+-    "h_holdMovingConcurrentMax", "h_holdMovingTimeRatio", "h_holdEndDropP90", "f_forcedRatio", "f_freeFingersMin",
+-    "f_busyFingersMax", "f_busyFingersMean", "f_holdHogRatio", "f_travelP95", "f_travelMax", "f_speedP95",
+-    "f_speedMax", "p_handNpsMax", "p_handNpsMin", "p_handBalance", "p_handChordMax", "p_sameHandStreamMax",
+-    "p_sameHandJackRatio", "p_handSpeedP95Max", "p_handTravelPerSec", "b_bpm", "b_bpmChanges",
+-    "b_beatIntervalP50", "b_beatIntervalP90", "b_beatIntervalCv", "b_offGridRatio", "b_subdivEntropy",
+-    "b_notePerBeatMax", "b_longHoldCrossBeatRatio", "pat_entropy", "pat_bigramEntropy", "pat_trigramEntropy",
+-    "pat_4gramRepeatRatio", "pat_8gramRepeatRatio", "pat_sectionRepeatRatio", "pat_sectionDistinctRatio",
+-    "pat_periodicity", "pat_periodLag", "pat_kindEntropy", "pat_chordEntropy", "d_npsEntropy", "d_npsGini",
+-    "d_top10sShare", "d_peakCount", "d_trend", "d_burstP99",
++    "h_holdCount",
++    "h_holdPerSec",
++    "h_holdLenMean",
++    "h_holdLenP90",
++    "h_holdLenMax",
++    "h_holdConcurrentMax",
++    "h_holdConcurrentMean",
++    "h_holdConcurrentP90",
++    "h_holdBusyRatio",
++    "h_holdMultiRatio",
++    "h_holdTripleRatio",
++    "h_holdStartChordMax",
++    "h_holdReleasePerSec",
++    "h_holdReleaseChordMax",
++    "h_holdTapDuringRatio",
++    "h_holdTapOverlapMax",
++    "h_holdMoveRatio",
++    "h_holdMoveSpeedP95",
++    "h_holdMoveSpeedMax",
++    "h_holdPathPerSec",
++    "h_holdMovingConcurrentMax",
++    "h_holdMovingTimeRatio",
++    "h_holdEndDropP90",
++    "f_forcedRatio",
++    "f_freeFingersMin",
++    "f_busyFingersMax",
++    "f_busyFingersMean",
++    "f_holdHogRatio",
++    "f_travelP95",
++    "f_travelMax",
++    "f_speedP95",
++    "f_speedMax",
++    "p_handNpsMax",
++    "p_handNpsMin",
++    "p_handBalance",
++    "p_handChordMax",
++    "p_sameHandStreamMax",
++    "p_sameHandJackRatio",
++    "p_handSpeedP95Max",
++    "p_handTravelPerSec",
++    "b_bpm",
++    "b_bpmChanges",
++    "b_beatIntervalP50",
++    "b_beatIntervalP90",
++    "b_beatIntervalCv",
++    "b_offGridRatio",
++    "b_subdivEntropy",
++    "b_notePerBeatMax",
++    "b_longHoldCrossBeatRatio",
++    "pat_entropy",
++    "pat_bigramEntropy",
++    "pat_trigramEntropy",
++    "pat_4gramRepeatRatio",
++    "pat_8gramRepeatRatio",
++    "pat_sectionRepeatRatio",
++    "pat_sectionDistinctRatio",
++    "pat_periodicity",
++    "pat_periodLag",
++    "pat_kindEntropy",
++    "pat_chordEntropy",
++    "d_npsEntropy",
++    "d_npsGini",
++    "d_top10sShare",
++    "d_peakCount",
++    "d_trend",
++    "d_burstP99",
+ ];
+ 
+ pub const BASE_FEATURE_NAMES: [&str; BASE_FEATURE_COUNT] = [
+@@ -254,7 +307,11 @@ impl PpsrFeaturePayload {
+             fake_ratio,
+             (1.0 + self.metadata.note_total as f64).ln(),
+             (1.0 + duration).ln(),
+-            if duration > 0.0 { self.metadata.note_total as f64 / duration } else { 0.0 },
++            if duration > 0.0 {
++                self.metadata.note_total as f64 / duration
++            } else {
++                0.0
++            },
+         ];
+         let mut features = Vec::with_capacity(MODEL_FEATURE_COUNT);
+         features.extend(self.features);
+@@ -902,13 +959,7 @@ struct HoldPath {
+     end_ax: f64,
+ }
+ 
+-fn compute_v2_features(
+-    notes: &[NoteRow],
+-    lines: &[LineSampler<'_>],
+-    chart: &Chart,
+-    aspect: f64,
+-    duration: f64,
+-) -> HashMap<&'static str, f64> {
++fn compute_v2_features(notes: &[NoteRow], lines: &[LineSampler<'_>], chart: &Chart, aspect: f64, duration: f64) -> HashMap<&'static str, f64> {
+     let mut values = HashMap::with_capacity(V2_FEATURE_COUNT);
+     let mut put = |name, value| {
+         values.insert(name, finite_or_zero(value));
+@@ -1046,7 +1097,14 @@ fn compute_v2_features(
+     put("h_holdReleaseChordMax", release_chord_max as f64);
+     put("h_holdTapDuringRatio", ratio(hold_tap_during, non_holds.len()));
+     put("h_holdTapOverlapMax", hold_tap_overlap_max);
+-    put("h_holdMoveRatio", if hold_length_sum > 0.0 { hold_moving_time / hold_length_sum } else { 0.0 });
++    put(
++        "h_holdMoveRatio",
++        if hold_length_sum > 0.0 {
++            hold_moving_time / hold_length_sum
++        } else {
++            0.0
++        },
++    );
+     put("h_holdMoveSpeedP95", percentile_sorted(&hold_speeds, 0.95));
+     put("h_holdMoveSpeedMax", hold_speeds.last().copied().unwrap_or(0.0));
+     put("h_holdPathPerSec", hold_path_sum / total_duration);
+@@ -1215,7 +1273,11 @@ fn compute_v2_features(
+     }
+     beat_intervals.sort_by(f64::total_cmp);
+     let mean_interval = mean(&beat_intervals);
+-    let beat_cv = if mean_interval > 0.0 { stdev(&beat_intervals) / mean_interval } else { 0.0 };
++    let beat_cv = if mean_interval > 0.0 {
++        stdev(&beat_intervals) / mean_interval
++    } else {
++        0.0
++    };
+     let off_grid = beats
+         .iter()
+         .filter(|&&beat| {
+@@ -1259,7 +1321,10 @@ fn compute_v2_features(
+ fn hold_path(note: &NoteRow, lines: &[LineSampler<'_>], aspect: f64) -> HoldPath {
+     let length = (note.end - note.t).max(0.0);
+     if length <= 0.0 || note.line >= lines.len() {
+-        return HoldPath { end_ax: note.ax, ..HoldPath::default() };
++        return HoldPath {
++            end_ax: note.ax,
++            ..HoldPath::default()
++        };
+     }
+     let samples = 40_usize.min(2_usize.max((length / 0.05).ceil() as usize));
+     let step = length / samples as f64;
+@@ -1286,7 +1351,12 @@ fn hold_path(note: &NoteRow, lines: &[LineSampler<'_>], aspect: f64) -> HoldPath
+         previous = Some((ax, ay));
+         end_ax = ax;
+     }
+-    HoldPath { path, max_speed, move_ratio: moving_time / length, end_ax }
++    HoldPath {
++        path,
++        max_speed,
++        move_ratio: moving_time / length,
++        end_ax,
++    }
+ }
+ 
+ fn grouped_count_max(times: &[f64], threshold: f64) -> usize {
+@@ -1349,7 +1419,11 @@ fn normalized_entropy(counts: &[f64]) -> f64 {
+ }
+ 
+ fn mean(values: &[f64]) -> f64 {
+-    if values.is_empty() { 0.0 } else { values.iter().sum::<f64>() / values.len() as f64 }
++    if values.is_empty() {
++        0.0
++    } else {
++        values.iter().sum::<f64>() / values.len() as f64
++    }
+ }
+ 
+ fn stdev(values: &[f64]) -> f64 {
+@@ -1362,10 +1436,17 @@ fn stdev(values: &[f64]) -> f64 {
+ 
+ fn add_pattern_features(values: &mut HashMap<&'static str, f64>, notes: &[NoteRow], mech: &[&NoteRow], duration: f64) {
+     let mut result = [
+-        ("pat_entropy", 0.0), ("pat_bigramEntropy", 0.0), ("pat_trigramEntropy", 0.0),
+-        ("pat_4gramRepeatRatio", 0.0), ("pat_8gramRepeatRatio", 0.0), ("pat_sectionRepeatRatio", 0.0),
+-        ("pat_sectionDistinctRatio", 0.0), ("pat_periodicity", 0.0), ("pat_periodLag", 0.0),
+-        ("pat_kindEntropy", 0.0), ("pat_chordEntropy", 0.0),
++        ("pat_entropy", 0.0),
++        ("pat_bigramEntropy", 0.0),
++        ("pat_trigramEntropy", 0.0),
++        ("pat_4gramRepeatRatio", 0.0),
++        ("pat_8gramRepeatRatio", 0.0),
++        ("pat_sectionRepeatRatio", 0.0),
++        ("pat_sectionDistinctRatio", 0.0),
++        ("pat_periodicity", 0.0),
++        ("pat_periodLag", 0.0),
++        ("pat_kindEntropy", 0.0),
++        ("pat_chordEntropy", 0.0),
+     ];
+     if mech.len() >= 3 {
+         let mut tokens = Vec::new();
+@@ -1376,7 +1457,12 @@ fn add_pattern_features(values: &mut HashMap<&'static str, f64>, notes: &[NoteRo
+                 continue;
+             }
+             let dx = pair[1].ax - pair[0].ax;
+-            let kind = match pair[1].kind { Kind::Click => 0, Kind::Hold => 1, Kind::Flick => 2, Kind::Drag => 3 };
++            let kind = match pair[1].kind {
++                Kind::Click => 0,
++                Kind::Hold => 1,
++                Kind::Flick => 2,
++                Kind::Drag => 3,
++            };
+             kind_counts[kind] += 1.0;
+             tokens.push(format!(
+                 "{}:{}:{}",
+@@ -1489,14 +1575,22 @@ fn add_density_features(values: &mut HashMap<&'static str, f64>, notes: &[NoteRo
+     let mut sorted = per_second.clone();
+     sorted.sort_by(f64::total_cmp);
+     let gini = if total > 0.0 {
+-        sorted.iter().enumerate().map(|(i, count)| (2.0 * (i + 1) as f64 - seconds as f64 - 1.0) * count).sum::<f64>()
++        sorted
++            .iter()
++            .enumerate()
++            .map(|(i, count)| (2.0 * (i + 1) as f64 - seconds as f64 - 1.0) * count)
++            .sum::<f64>()
+             / (seconds as f64 * total)
+     } else {
+         0.0
+     };
+     let top_sum: f64 = sorted.iter().rev().take(10).sum();
+     let max_count = sorted.last().copied().unwrap_or(0.0);
+-    let peak_count = if max_count > 0.0 { per_second.iter().filter(|&&count| count >= max_count * 0.8).count() } else { 0 };
++    let peak_count = if max_count > 0.0 {
++        per_second.iter().filter(|&&count| count >= max_count * 0.8).count()
++    } else {
++        0
++    };
+     let third = (seconds / 3).max(1);
+     let head = mean(&per_second[..third.min(seconds)]);
+     let tail = mean(&per_second[seconds.saturating_sub(third)..]);
+diff --git a/phira/src/replay/transport.rs b/phira/src/replay/transport.rs
+index 2a9414f..5363bf8 100644
+--- a/phira/src/replay/transport.rs
++++ b/phira/src/replay/transport.rs
+@@ -3,7 +3,9 @@ pub const RATES: [f32; 8] = [0.1, 0.25, 0.5, 0.75, 1., 1.5, 2., 3.];
+ /// Target time and whether it comes from a continuous recorded frame table.
+ pub fn frame_step(frames: &[f64], current: f64, delta: i32, end: f64) -> (f64, bool) {
+     let fallback = (current + delta as f64 / 60.).clamp(0., end);
+-    if delta == 0 { return (current.clamp(0., end), false); }
++    if delta == 0 {
++        return (current.clamp(0., end), false);
++    }
+     let index = if delta > 0 {
+         frames.partition_point(|t| *t <= current + 1e-7) as i64 + delta as i64 - 1
+     } else {
+@@ -11,10 +13,14 @@ pub fn frame_step(frames: &[f64], current: f64, delta: i32, end: f64) -> (f64, b
+     };
+     // Old/sparse tapes may have only touch-sample timestamps, or stop before
+     // the audio ends. Missing frames must not turn one step into a song seek.
+-    let Some(target) = usize::try_from(index).ok().and_then(|i| frames.get(i)).copied() else { return (fallback, false) };
++    let Some(target) = usize::try_from(index).ok().and_then(|i| frames.get(i)).copied() else {
++        return (fallback, false);
++    };
+     if (target - current).abs() > delta.unsigned_abs() as f64 * 0.25 {
+         (fallback, false)
+-    } else { (target.clamp(0., end), true) }
++    } else {
++        (target.clamp(0., end), true)
++    }
+ }
+ #[cfg(test)]
+ pub fn frame_target(frames: &[f64], current: f64, delta: i32, end: f64) -> f64 {
+@@ -26,7 +32,11 @@ pub fn loop_target(current: f64, a: Option<f64>, b: Option<f64>, enabled: bool)
+ }
+ pub fn error_index(errors: &[f64], current: f64, next: bool, selected: Option<usize>) -> Option<usize> {
+     if let Some(i) = selected.filter(|&i| errors.get(i).is_some_and(|t| current >= (t - 1.).max(0.) - 1e-7 && current <= *t + 1e-7)) {
+-        return if next { (i + 1 < errors.len()).then_some(i + 1) } else { i.checked_sub(1) };
++        return if next {
++            (i + 1 < errors.len()).then_some(i + 1)
++        } else {
++            i.checked_sub(1)
++        };
+     }
+     if next {
+         let i = errors.partition_point(|t| *t <= current + 1e-7);
+diff --git a/prpr/examples/render_chart_video.rs b/prpr/examples/render_chart_video.rs
+index 7dd7d65..0909a8b 100644
+--- a/prpr/examples/render_chart_video.rs
++++ b/prpr/examples/render_chart_video.rs
+@@ -9,7 +9,7 @@
+ 
+ use macroquad::prelude::*;
+ use prpr::{
+-    chart_video::{ChartVideoRenderer, VideoOptions},
++    chart_video::{ChartVideoRenderer, VideoEncoder, VideoOptions},
+     core::{BOLD_FONT, PGR_FONT},
+     ui::{FontArc, TextPainter},
+ };
+@@ -73,8 +73,16 @@ async fn main() {
+         start: env_f64("START").unwrap_or(0.),
+         end: env_f64("END"),
+         hitsound: std::env::var_os("NO_HITSOUND").is_none(),
+-        show_hud: std::env::var_os("HUD").is_some(),
++        show_hud: std::env::var_os("NO_HUD").is_none(),
++        show_accuracy: std::env::var_os("SHOW_ACCURACY").is_some(),
++        show_offset_indicator: std::env::var_os("SHOW_OFFSET_INDICATOR").is_some(),
++        include_audio: std::env::var_os("NO_AUDIO").is_none(),
+         sample_count: env_u32("SAMPLES", 4),
++        encoder: match std::env::var("VIDEO_ENCODER").as_deref() {
++            Ok("h264_nvenc") => VideoEncoder::H264Nvenc,
++            _ => VideoEncoder::H264Software,
++        },
++        res_pack_path: std::env::var_os("SKIN_PATH").map(PathBuf::from),
+     };
+     let out = if png_dir.is_some() { out } else { out };
+     let mut renderer = match finish(ChartVideoRenderer::new(chart, opts, out.clone())).await {
+diff --git a/prpr/src/chart_video.rs b/prpr/src/chart_video.rs
+index 5c6a491..74723cb 100644
+--- a/prpr/src/chart_video.rs
++++ b/prpr/src/chart_video.rs
+@@ -1,8 +1,8 @@
+ //! 铺面视频渲染（Phi Recorder 风格）。
+ //!
+ //! 把 `GameScene`（自动播放）逐帧画到离屏 `RenderTarget`，读回像素后经管道交给
+-//! 系统 `ffmpeg` 编码成 mp4，可选混入谱面音乐。整个过程不播放音频、不显示 HUD，
+-//! 输出的每一帧只取决于时间戳，因此可以任意断点/加速渲染。
++//! 系统 `ffmpeg` 编码成 mp4，可选混入谱面音乐和 HUD。输出的每一帧只取决于时间戳，
++//! 因此可以任意断点/加速渲染。
+ 
+ use std::{
+     io::Write,
+@@ -10,14 +10,14 @@ use std::{
+     process::{Child, ChildStdin, Command, Stdio},
+ };
+ 
+-use sasa::{AudioClip, Frame};
++use sasa::Frame;
+ 
+ use anyhow::{bail, Context, Result};
+ use macroquad::{prelude::*, window::get_internal_gl};
+ 
+ use crate::{
+     config::{Config, Mods},
+-    core::{BadNote, Chart, HitSound},
++    core::{BadNote, Chart, HitSound, ResourcePack},
+     ext::SafeTexture,
+     fs::{fs_from_file, load_info},
+     scene::{GameMode, GameScene, LoadingScene, Scene},
+@@ -37,10 +37,28 @@ pub struct VideoOptions {
+     pub end: Option<f64>,
+     /// 是否混入打击音（音乐始终会混入）。
+     pub hitsound: bool,
+-    /// 是否画分数/连击/暂停按钮等 HUD（默认不画，只留谱面）。
++    /// 是否画分数/连击/曲名与难度等 HUD（默认显示）。
+     pub show_hud: bool,
++    /// 是否显示实时准确率百分比（默认隐藏）。
++    pub show_accuracy: bool,
++    /// 是否显示屏幕上方的判定偏移指示器。视频渲染默认关闭。
++    pub show_offset_indicator: bool,
++    /// 是否在成片中混入谱面音乐与打击音。
++    pub include_audio: bool,
+     /// MSAA 采样数。
+     pub sample_count: u32,
++    /// 视频编码器。NVENC 仍接收 CPU 侧 RGBA 帧；它只替换编码阶段。
++    pub encoder: VideoEncoder,
++    /// 可选 Phira Pro 资源包目录或 ZIP。缺省时使用程序默认资源包。
++    /// 资源包只替换 Note、Hold 和打击特效素材，不改变谱面动画计算。
++    pub res_pack_path: Option<PathBuf>,
++}
++
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++pub enum VideoEncoder {
++    #[default]
++    H264Software,
++    H264Nvenc,
+ }
+ 
+ impl Default for VideoOptions {
+@@ -52,8 +70,13 @@ impl Default for VideoOptions {
+             start: 0.,
+             end: None,
+             hitsound: true,
+-            show_hud: false,
++            show_hud: true,
++            show_accuracy: false,
++            show_offset_indicator: false,
++            include_audio: true,
+             sample_count: 4,
++            encoder: VideoEncoder::H264Software,
++            res_pack_path: None,
+         }
+     }
+ }
+@@ -205,7 +228,42 @@ impl Encoder {
+             cmd.arg("-f").arg("wav").arg("-i").arg(hitsound);
+         }
+         cmd.arg("-vf").arg("vflip");
+-        cmd.arg("-c:v").arg("libx264").arg("-preset").arg("veryfast").arg("-crf").arg("18");
++        match opts.encoder {
++            VideoEncoder::H264Software => {
++                // Keep the quality target fixed while allowing exporters to trade
++                // encoding time for file size. Invalid values use the prior default.
++                const X264_PRESETS: &[&str] = &[
++                    "ultrafast",
++                    "superfast",
++                    "veryfast",
++                    "faster",
++                    "fast",
++                    "medium",
++                    "slow",
++                    "slower",
++                    "veryslow",
++                ];
++                let preset = std::env::var("PHIRA_X264_PRESET")
++                    .ok()
++                    .filter(|preset| X264_PRESETS.contains(&preset.as_str()))
++                    .unwrap_or_else(|| "veryfast".to_owned());
++                cmd.arg("-c:v").arg("libx264").arg("-preset").arg(preset).arg("-crf").arg("18");
++            }
++            VideoEncoder::H264Nvenc => {
++                cmd.arg("-c:v")
++                    .arg("h264_nvenc")
++                    .arg("-preset")
++                    .arg("p4")
++                    .arg("-tune")
++                    .arg("hq")
++                    .arg("-rc")
++                    .arg("vbr")
++                    .arg("-cq")
++                    .arg("19")
++                    .arg("-b:v")
++                    .arg("0");
++            }
++        }
+         cmd.arg("-pix_fmt").arg("yuv420p");
+         match (music.is_some(), hitsound.is_some()) {
+             // 音乐按起始时间裁剪，打击音轨道已经对齐到视频起点。
+@@ -269,16 +327,32 @@ pub struct ChartVideoRenderer {
+     hitsound_temp: Option<PathBuf>,
+     buf: Vec<u8>,
+     title: String,
++    level: String,
++    track_length: f64,
++    has_music: bool,
++    preview_only: bool,
+ }
+ 
+ impl ChartVideoRenderer {
+     /// 加载谱面并启动编码器。`source` 可以是谱面目录，也可以是 `.pez` / `.zip` 文件。
+     pub async fn new(source: PathBuf, opts: VideoOptions, out_path: PathBuf) -> Result<Self> {
++        Self::new_inner(source, opts, Some(out_path)).await
++    }
++
++    /// 加载同一套游戏场景用于实时预览，不启动编码器。
++    pub async fn new_preview(source: PathBuf, opts: VideoOptions) -> Result<Self> {
++        Self::new_inner(source, opts, None).await
++    }
++
++    async fn new_inner(source: PathBuf, opts: VideoOptions, output_path: Option<PathBuf>) -> Result<Self> {
+         opts.validate()?;
++        let preview_only = output_path.is_none();
+         let mut fs = fs_from_file(&source).with_context(|| format!("无法打开谱面：{}", source.display()))?;
+         let info = load_info(fs.as_mut())
+             .await
+             .with_context(|| format!("无法读取谱面信息：{}", source.display()))?;
++        let has_music = !info.music.trim().is_empty();
++        let level = info.level.clone();
+         // 没有曲绘时用一个纯色贴图兜底，谱面本身仍然可以渲染。
+         let (illustration, background) = match LoadingScene::load(fs.as_mut(), &info.illustration).await {
+             Ok((illustration, background, _)) => (illustration, background),
+@@ -289,7 +363,7 @@ impl ChartVideoRenderer {
+             }
+         };
+ 
+-        let music_temp = if !info.music.is_empty() {
++        let music_temp = if !preview_only && opts.include_audio && has_music {
+             match fs.load_file(&info.music).await {
+                 Ok(bytes) => {
+                     let ext = Path::new(&info.music)
+@@ -317,8 +391,8 @@ impl ChartVideoRenderer {
+ 
+         let mut config = Config::default();
+         config.mods = Mods::AUTOPLAY;
+-        config.volume_music = 0.;
+-        config.volume_sfx = 0.;
++        config.volume_music = if preview_only { 1. } else { 0. };
++        config.volume_sfx = if preview_only { 1. } else { 0. };
+         config.sample_count = opts.sample_count.clamp(1, 8);
+         config.show_avg_fps = false;
+         config.show_fps = false;
+@@ -326,6 +400,9 @@ impl ChartVideoRenderer {
+         config.speed = 1.;
+         config.adjust_time = false;
+         config.interactive = false;
++        config.show_acc = opts.show_accuracy;
++        config.offset_indicator = opts.show_offset_indicator;
++        config.res_pack_path = opts.res_pack_path.as_ref().map(|path| path.to_string_lossy().into_owned());
+ 
+         let mut scene = GameScene::new(GameMode::View, info, config, fs, None, background, illustration, None, None, None)
+             .await
+@@ -346,8 +423,8 @@ impl ChartVideoRenderer {
+         }
+         // 打击音的时间点只和谱面有关，渲染前先混成一条音轨，
+         // 再由 ffmpeg 跟音乐一起 amix。
+-        let hitsound_temp = if opts.hitsound {
+-            match write_hitsound(&scene.chart, offset, start, duration).await {
++        let hitsound_temp = if !preview_only && opts.include_audio && opts.hitsound {
++            match write_hitsound(&scene.chart, &scene.res.res_pack, offset, start, duration) {
+                 Ok(path) => Some(path),
+                 Err(err) => {
+                     tracing::warn!("打击音混音失败，本次不带打击音：{err:?}");
+@@ -358,10 +435,14 @@ impl ChartVideoRenderer {
+             None
+         };
+         let title = scene.res.info.name.clone();
+-        if let Some(dir) = out_path.parent().filter(|it| !it.as_os_str().is_empty()) {
+-            std::fs::create_dir_all(dir).with_context(|| format!("无法创建输出目录：{}", dir.display()))?;
+-        }
+-        let encoder = Encoder::spawn(&opts, &out_path, music_temp.as_deref(), hitsound_temp.as_deref(), start, duration)?;
++        let encoder = if let Some(out_path) = output_path.as_ref() {
++            if let Some(dir) = out_path.parent().filter(|it| !it.as_os_str().is_empty()) {
++                std::fs::create_dir_all(dir).with_context(|| format!("无法创建输出目录：{}", dir.display()))?;
++            }
++            Some(Encoder::spawn(&opts, out_path, music_temp.as_deref(), hitsound_temp.as_deref(), start, duration)?)
++        } else {
++            None
++        };
+         let buf = vec![0; opts.width as usize * opts.height as usize * 4];
+ 
+         Ok(Self {
+@@ -375,12 +456,16 @@ impl ChartVideoRenderer {
+             duration,
+             total_frames,
+             frame: 0,
+-            encoder: Some(encoder),
+-            out_path,
++            encoder,
++            out_path: output_path.unwrap_or_default(),
+             music_temp,
+             hitsound_temp,
+             buf,
+             title,
++            level,
++            track_length,
++            has_music,
++            preview_only,
+         })
+     }
+ 
+@@ -396,6 +481,69 @@ impl ChartVideoRenderer {
+         self.duration
+     }
+ 
++    pub fn track_length(&self) -> f64 {
++        self.track_length
++    }
++
++    pub fn level(&self) -> &str {
++        &self.level
++    }
++
++    pub fn has_music(&self) -> bool {
++        self.has_music
++    }
++
++    pub fn preview_only(&self) -> bool {
++        self.preview_only
++    }
++
++    pub fn preview_time(&self) -> f64 {
++        self.scene.music.position().clamp(0., self.track_length)
++    }
++
++    pub fn preview_paused(&mut self) -> bool {
++        self.scene.music.paused()
++    }
++
++    pub fn preview_play(&mut self) -> Result<()> {
++        if !self.preview_only {
++            bail!("只能在预览场景中播放音乐");
++        }
++        self.scene.music.play()
++    }
++
++    pub fn preview_pause(&mut self) -> Result<()> {
++        if !self.preview_only {
++            bail!("只能在预览场景中暂停音乐");
++        }
++        self.scene.music.pause()
++    }
++
++    pub fn preview_seek(&mut self, time: f64) -> Result<()> {
++        if !self.preview_only {
++            bail!("只能在预览场景中跳转时间");
++        }
++        let time = time.clamp(0., self.track_length);
++        self.scene.music.seek_to(time)?;
++        Ok(())
++    }
++
++    pub fn preview_set_volume(&mut self, volume: f32) -> Result<()> {
++        if !self.preview_only {
++            bail!("只能在预览场景中调节音量");
++        }
++        self.scene.music.set_amplifier(volume.clamp(0., 1.))
++    }
++
++    pub fn set_preview_hud(&mut self, visible: bool) -> Result<()> {
++        if !self.preview_only {
++            bail!("只能在预览场景中切换 HUD");
++        }
++        self.scene.hide_ui = !visible;
++        self.opts.show_hud = visible;
++        Ok(())
++    }
++
+     pub fn options(&self) -> &VideoOptions {
+         &self.opts
+     }
+@@ -416,10 +564,30 @@ impl ChartVideoRenderer {
+ 
+     /// 渲染下一帧（不调用 `next_frame`，可在同一渲染帧内连续调用）。
+     pub fn render_next_frame(&mut self, painter: &mut TextPainter) -> Result<()> {
++        if self.preview_only {
++            bail!("预览场景应使用 render_preview_at");
++        }
+         if self.finished() {
+             return Ok(());
+         }
+         let music_time = self.start + self.frame as f64 / self.opts.fps as f64;
++        self.render_at_time(painter, music_time, true)?;
++        self.frame += 1;
++        Ok(())
++    }
++
++    /// 以指定音乐时间绘制预览帧，不推进导出帧计数，也不写视频编码器。
++    pub fn render_preview_at(&mut self, painter: &mut TextPainter, music_time: f64) -> Result<()> {
++        if !self.preview_only {
++            bail!("render_preview_at 只能用于预览场景");
++        }
++        if !music_time.is_finite() {
++            bail!("预览时间无效");
++        }
++        self.render_at_time(painter, music_time.clamp(0., self.track_length), false)
++    }
++
++    fn render_at_time(&mut self, painter: &mut TextPainter, music_time: f64, encode: bool) -> Result<()> {
+         let time = music_time - self.offset;
+         self.scene.res.time = time;
+         self.scene.res.alpha = 1.;
+@@ -432,11 +600,14 @@ impl ChartVideoRenderer {
+             self.scene.render(&mut self.tm, &mut ui).context("渲染谱面失败")?;
+         }
+         unsafe { get_internal_gl() }.flush();
+-        self.read_pixels();
+-        if let Some(encoder) = &mut self.encoder {
+-            encoder.write(&self.buf)?;
++        if encode {
++            self.read_pixels();
++            if let Some(encoder) = &mut self.encoder {
++                encoder.write(&self.buf)?;
++            } else {
++                bail!("导出场景缺少编码器");
++            }
+         }
+-        self.frame += 1;
+         Ok(())
+     }
+ 
+@@ -522,31 +693,14 @@ fn write_wav(path: &Path, frames: &[Frame], rate: u32) -> std::io::Result<()> {
+     std::fs::write(path, out)
+ }
+ 
+-/// 读一个默认打击音。顺序和 `ResourcePack` 里一致：ogg、wav、mp3，最后退回内置资源。
+-async fn load_default_clip(fs: &mut dyn crate::fs::FileSystem, name: &str) -> Result<AudioClip> {
+-    for ext in ["ogg", "wav", "mp3"] {
+-        let path = format!("{name}.{ext}");
+-        if let Ok(bytes) = fs.load_file(&path).await {
+-            return AudioClip::new(bytes).with_context(|| format!("无法解析打击音 {path}"));
+-        }
+-    }
+-    let bytes = load_file(&format!("{name}.ogg")).await?;
+-    AudioClip::new(bytes).with_context(|| format!("无法解析内置打击音 {name}.ogg"))
+-}
+-
+ /// 把谱面的打击音按时间点混成一条音轨，返回临时 wav 路径。
+ ///
+ /// 视频从 `start` 开始，音轨整体前移，和首帧对齐；`offset` 是谱面时间到音乐时间的偏移。
+-async fn write_hitsound(chart: &Chart, offset: f64, start: f64, duration: f64) -> Result<PathBuf> {
++fn write_hitsound(chart: &Chart, res_pack: &ResourcePack, offset: f64, start: f64, duration: f64) -> Result<PathBuf> {
+     let total = (duration * HITSOUND_RATE as f64).ceil().max(0.) as usize;
+     if total == 0 {
+         bail!("渲染时长为 0");
+     }
+-    let mut fs = crate::fs::fs_from_assets("respack/")?;
+-    let mut clips = std::collections::HashMap::new();
+-    for name in ["click", "drag", "flick"] {
+-        clips.insert(name, load_default_clip(fs.as_mut(), name).await?);
+-    }
+     let mut mix = vec![Frame::default(); total];
+     for line in &chart.lines {
+         for note in &line.notes {
+@@ -559,11 +713,11 @@ async fn write_hitsound(chart: &Chart, offset: f64, start: f64, duration: f64) -
+             }
+             let clip = match &note.hitsound {
+                 HitSound::None => continue,
+-                HitSound::Click => &clips["click"],
+-                HitSound::Flick => &clips["flick"],
+-                HitSound::Drag => &clips["drag"],
+-                // 没找到的自定义打击音退回点击音，至少不会静音。
+-                HitSound::Custom(name) => chart.hitsounds.get(name).unwrap_or(&clips["click"]),
++                HitSound::Click => &res_pack.sfx_click,
++                HitSound::Flick => &res_pack.sfx_flick,
++                HitSound::Drag => &res_pack.sfx_drag,
++                // 自定义谱面音效优先使用谱面内资源；找不到时退回当前皮肤点击音。
++                HitSound::Custom(name) => chart.hitsounds.get(name).unwrap_or(&res_pack.sfx_click),
+             };
+             let begin = (at * HITSOUND_RATE as f64).round() as usize;
+             let len = (clip.length() * HITSOUND_RATE as f64).ceil() as usize;
+diff --git a/prpr/src/core/block.rs b/prpr/src/core/block.rs
+index 275791d..5e32846 100644
+--- a/prpr/src/core/block.rs
++++ b/prpr/src/core/block.rs
+@@ -78,8 +78,7 @@ pub struct BlockTransform {
+ 
+ impl BlockTransform {
+     pub fn point(&self, local: Vector) -> Vector {
+-        self.center + (Rotation2::new(self.rotation.to_radians()) * local.component_mul(&self.size))
+-            .component_mul(&Vector::new(1., self.y_scale))
++        self.center + (Rotation2::new(self.rotation.to_radians()) * local.component_mul(&self.size)).component_mul(&Vector::new(1., self.y_scale))
+     }
+ }
+ 
+diff --git a/prpr/src/core/block_mask.rs b/prpr/src/core/block_mask.rs
+index e083956..4b948b1 100644
+--- a/prpr/src/core/block_mask.rs
++++ b/prpr/src/core/block_mask.rs
+@@ -651,11 +651,10 @@ fn glow_weights() -> [f32; 6] {
+ }
+ 
+ fn unorm(v: f32) -> u8 {
+-    let scaled = v.clamp(0., 1.) * 255.;
+-    let whole = scaled as u8;
+-    // Nonnegative R8 round-to-nearest, preserving exact half ties without a
+-    // scalar roundf call or the precision loss of adding .5 before truncation.
+-    whole + u8::from(scaled - whole as f32 >= 0.5)
++    // Use Rust's explicitly defined ties-away-from-zero rounding. A manual
++    // fractional comparison can disagree at exact half-byte boundaries on
++    // some Windows codegen targets because the multiply is rounded differently.
++    (v.clamp(0., 1.) * 255.).round() as u8
+ }
+ 
+ fn subtract_enabled(red: u8) -> f32 {
+diff --git a/prpr/src/core/resource.rs b/prpr/src/core/resource.rs
+index 120bdcb..35fa412 100644
+--- a/prpr/src/core/resource.rs
++++ b/prpr/src/core/resource.rs
+@@ -199,7 +199,7 @@ impl ResourcePack {
+             if let Some(path) = path {
+                 crate::fs::fs_from_file(path.as_ref())?
+             } else {
+-                crate::fs::fs_from_assets("respack/")?
++                crate::fs::fs_from_assets("respack-open/")?
+             }
+             .deref_mut(),
+         )
+@@ -258,7 +258,9 @@ impl ResourcePack {
+ 
+         macro_rules! load_clip {
+             ($path:literal) => {{
+-                // Missing-file fallback order remains ogg, wav, mp3, asset.
++                // Custom packs can override a cue. Missing cues fall back to
++                // the project's original redistributable pack, never to an
++                // unrelated working-directory file.
+                 // A present but invalid clip still returns its decode error.
+                 let bytes = if let Ok(bytes) = fs.load_file(concat!($path, ".ogg")).await {
+                     bytes
+@@ -267,7 +269,7 @@ impl ResourcePack {
+                 } else if let Ok(bytes) = fs.load_file(concat!($path, ".mp3")).await {
+                     bytes
+                 } else {
+-                    load_file(concat!($path, ".ogg")).await?
++                    load_open_default_clip($path).await?
+                 };
+                 crate::loading_cpu::audio(bytes).await?
+             }};
+@@ -286,6 +288,15 @@ impl ResourcePack {
+     }
+ }
+ 
++async fn load_open_default_clip(name: &str) -> Result<Vec<u8>> {
++    for ext in ["ogg", "wav", "mp3"] {
++        if let Ok(bytes) = load_file(&format!("respack-open/{name}.{ext}")).await {
++            return Ok(bytes);
++        }
++    }
++    bail!("Missing default resource-pack audio {name}.* under assets/respack-open/")
++}
++
+ pub struct ParticleEmitter {
+     pub scale: f32,
+     pub emitter: Emitter,
+diff --git a/prpr/src/core/rpe_block.rs b/prpr/src/core/rpe_block.rs
+index c3775ac..50f59be 100644
+--- a/prpr/src/core/rpe_block.rs
++++ b/prpr/src/core/rpe_block.rs
+@@ -275,7 +275,14 @@ mod tests {
+     fn line2area_preview_is_immediate_ready_then_active_then_dim() {
+         let mut marker = Marker::new(0, false, &AnimFloat::fixed(0.));
+         marker.set_lifecycle(&[(1., 1.), (3., 2.), (5., 3.), (7., 4.)]);
+-        for (time, active, ready) in [(1., false, false), (2.49, false, false), (2.5, false, true), (2.99, false, true), (3., true, false), (5., false, false)] {
++        for (time, active, ready) in [
++            (1., false, false),
++            (2.49, false, false),
++            (2.5, false, true),
++            (2.99, false, true),
++            (3., true, false),
++            (5., false, false),
++        ] {
+             let mut area = area(&marker, time).unwrap();
+             area.rpe_canvas = true;
+             let zone = Zone::from_area(&area, time, 16. / 9.).unwrap();
+@@ -415,7 +422,12 @@ mod tests {
+             assert_eq!(tr.size, scale.map(f32::abs));
+         }
+         marker.anchor = Vector::new(0.5, 0.5);
+-        assert_eq!(marker.transform(Vector::zeros(), Vector::new(-2., 3.), Vector::new(1., 1.), 90., 1.5).center, Vector::zeros());
++        assert_eq!(
++            marker
++                .transform(Vector::zeros(), Vector::new(-2., 3.), Vector::new(1., 1.), 90., 1.5)
++                .center,
++            Vector::zeros()
++        );
+     }
+ 
+     #[test]
+diff --git a/prpr/src/core/tween.rs b/prpr/src/core/tween.rs
+index e1b579b..428c4b8 100644
+--- a/prpr/src/core/tween.rs
++++ b/prpr/src/core/tween.rs
+@@ -120,11 +120,8 @@ pub static TWEEN_FUNCTIONS: [fn(f32) -> f32; 33] = [
+ 
+ // Phira Pro：改成全局缓存（原来按线程缓存）。`TweenRef` 已是 `Arc`，全线程共享同一份即可，
+ // 也让后台解析线程创建的缓动对象能被主线程安全使用。
+-static TWEEN_FUNCTION_RCS: std::sync::LazyLock<Vec<TweenRef>> = std::sync::LazyLock::new(|| {
+-    (0..33)
+-        .map(|it| -> TweenRef { Arc::new(StaticTween(it)) })
+-        .collect()
+-});
++static TWEEN_FUNCTION_RCS: std::sync::LazyLock<Vec<TweenRef>> =
++    std::sync::LazyLock::new(|| (0..33).map(|it| -> TweenRef { Arc::new(StaticTween(it)) }).collect());
+ 
+ macro_rules! i1 {
+     ($fn:ident) => {
+@@ -272,11 +269,8 @@ pub static INT_TWEEN_FUNCTIONS:[fn(f32) -> f32; 33] =[
+     i1!(int_bounce),	i2!(int_bounce),	i3!(int_bounce),
+ ];
+ 
+-static INT_TWEEN_FUNCTION_RCS: std::sync::LazyLock<Vec<TweenRef>> = std::sync::LazyLock::new(|| {
+-    (0..33)
+-        .map(|it| -> TweenRef { Arc::new(IntStaticTween(it)) })
+-        .collect()
+-});
++static INT_TWEEN_FUNCTION_RCS: std::sync::LazyLock<Vec<TweenRef>> =
++    std::sync::LazyLock::new(|| (0..33).map(|it| -> TweenRef { Arc::new(IntStaticTween(it)) }).collect());
+ 
+ pub trait TweenFunction {
+     fn y(&self, x: f32) -> f32;
+diff --git a/prpr/src/file_import.rs b/prpr/src/file_import.rs
+index 08fa55d..2d91fa6 100644
+--- a/prpr/src/file_import.rs
++++ b/prpr/src/file_import.rs
+@@ -1,6 +1,10 @@
+ //! Materialize picker files without loading an entire chart collection into RAM.
+ use anyhow::{Context, Result};
+-use std::{fs::{self, File, OpenOptions}, io::{self, Write}, path::{Path, PathBuf}};
++use std::{
++    fs::{self, File, OpenOptions},
++    io::{self, Write},
++    path::{Path, PathBuf},
++};
+ 
+ pub(crate) fn prepare(source: &Path, temporary: &Path) -> Result<PathBuf> {
+     let mut input = File::open(source).context("无法打开所选文件")?;
+@@ -12,7 +16,11 @@ pub(crate) fn prepare(source: &Path, temporary: &Path) -> Result<PathBuf> {
+         return Ok(source.to_path_buf());
+     }
+     let target = temporary.join(format!("phira-import-{}", uuid::Uuid::new_v4()));
+-    let mut output = OpenOptions::new().write(true).create_new(true).open(&target).context("无法创建导入临时文件")?;
++    let mut output = OpenOptions::new()
++        .write(true)
++        .create_new(true)
++        .open(&target)
++        .context("无法创建导入临时文件")?;
+     let copied = (|| -> Result<()> {
+         io::copy(&mut input, &mut output).context("复制所选文件失败，请检查可用存储空间")?;
+         output.flush().context("写入导入临时文件失败")?;
+@@ -44,7 +52,9 @@ mod tests {
+         let external = root.path().join("外部文件.zip");
+         let chunk = [0x5a; 64 * 1024];
+         let mut file = File::create(&external).unwrap();
+-        for _ in 0..512 { file.write_all(&chunk).unwrap(); }
++        for _ in 0..512 {
++            file.write_all(&chunk).unwrap();
++        }
+         drop(file);
+         let copied = prepare(&external, &temporary).unwrap();
+         assert_ne!(copied, external);
+diff --git a/prpr/src/fs.rs b/prpr/src/fs.rs
+index 4873b83..c00901a 100644
+--- a/prpr/src/fs.rs
++++ b/prpr/src/fs.rs
+@@ -315,7 +315,11 @@ pub async fn fix_info_with(fs: &mut dyn FileSystem, info: &mut ChartInfo, infer_
+     async fn get(fs: &mut dyn FileSystem, path: &mut String) -> Result<Option<String>> {
+         Ok(if fs.exists(path).await? { Some(std::mem::take(path)) } else { None })
+     }
+-    let mut chart = if is_block_area_sidecar(&info.chart) { None } else { get(fs, &mut info.chart).await? };
++    let mut chart = if is_block_area_sidecar(&info.chart) {
++        None
++    } else {
++        get(fs, &mut info.chart).await?
++    };
+     let mut music = get(fs, &mut info.music).await?;
+     let mut illustration = get(fs, &mut info.illustration).await?;
+     fn put(desc: &str, status: &mut Option<String>, value: String) {
+diff --git a/prpr/src/judge/phigros.rs b/prpr/src/judge/phigros.rs
+index 2be9cd5..373c30f 100644
+--- a/prpr/src/judge/phigros.rs
++++ b/prpr/src/judge/phigros.rs
+@@ -182,7 +182,13 @@ impl Engine {
+         for i in range {
+             let n = &self.specs[i];
+             let state = &self.states[i];
+-            if state.done || if flick { n.kind != Kind::Flick || state.is_judged_for_flick } else { state.is_judged } {
++            if state.done
++                || if flick {
++                    n.kind != Kind::Flick || state.is_judged_for_flick
++                } else {
++                    state.is_judged
++                }
++            {
+                 continue;
+             }
+             if !flick && ((n.kind == Kind::Drag && !cfg.drag_protect) || (n.kind == Kind::Flick && !cfg.flick_protect)) {
+@@ -276,8 +282,14 @@ impl Engine {
+                 self.flicks.get_mut(&f.id).unwrap().new_flick = false;
+             }
+         }
+-        let ctx = JudgeContext { cfg, now, limits: &limits, rules };
+-        self.note_update_manager.update(&self.specs, &mut self.states, &ctx, fingers, &mut geometry, &mut events);
++        let ctx = JudgeContext {
++            cfg,
++            now,
++            limits: &limits,
++            rules,
++        };
++        self.note_update_manager
++            .update(&self.specs, &mut self.states, &ctx, fingers, &mut geometry, &mut events);
+         (limits, events)
+     }
+ }
+diff --git a/prpr/src/judge/phigros/controls.rs b/prpr/src/judge/phigros/controls.rs
+index 4ab731a..2c0c129 100644
+--- a/prpr/src/judge/phigros/controls.rs
++++ b/prpr/src/judge/phigros/controls.rs
+@@ -1,5 +1,5 @@
+-use super::{Action, Config, Event, Finger, JudgeWindows, Judgement, Kind, PhigrosRules, Spec};
+ use super::super::{judge_distance, judgement_at_distance, judgement_of_offset, UP_TOLERANCE};
++use super::{Action, Config, Event, Finger, JudgeWindows, Judgement, Kind, PhigrosRules, Spec};
+ 
+ #[derive(Clone, Default)]
+ pub(super) struct NoteState {
+@@ -67,7 +67,10 @@ impl HoldControl {
+         if state.done {
+             if self.hold_scored && ctx.now >= note.end {
+                 self.hold_scored = false;
+-                events.push(Event { target: note.target, action: Action::EndHold });
++                events.push(Event {
++                    target: note.target,
++                    action: Action::EndHold,
++                });
+             }
+             return;
+         }
+@@ -129,12 +132,18 @@ impl HoldControl {
+         }
+         if let Some((judgement, offset)) = score {
+             if ctx.cfg.hold_tail_judge && self.head.is_none() {
+-                events.push(Event { target: note.target, action: Action::Score { judgement, offset } });
++                events.push(Event {
++                    target: note.target,
++                    action: Action::Score { judgement, offset },
++                });
+             }
+             state.score(note, judgement, offset, events);
+             self.hold_scored = !matches!(judgement, Judgement::Miss) && ctx.now < note.end;
+             if !matches!(judgement, Judgement::Miss) && ctx.now >= note.end {
+-                events.push(Event { target: note.target, action: Action::EndHold });
++                events.push(Event {
++                    target: note.target,
++                    action: Action::EndHold,
++                });
+             }
+         }
+     }
+diff --git a/prpr/src/judge/phigros/tests.rs b/prpr/src/judge/phigros/tests.rs
+index ef80b3d..89d7827 100644
+--- a/prpr/src/judge/phigros/tests.rs
++++ b/prpr/src/judge/phigros/tests.rs
+@@ -1,5 +1,5 @@
+-use super::*;
+ use super::controls::Control;
++use super::*;
+ 
+ #[test]
+ fn asymmetric_grades_and_hold_heads_use_the_correct_side() {
+@@ -7,13 +7,25 @@ fn asymmetric_grades_and_hold_heads_use_the_correct_side() {
+     cfg.judge_timing.early_ms = Some([16., 60., 100., 200.]);
+     cfg.judge_timing.late_ms = Some([20., 90., 180., 220.]);
+     cfg.phigros_rules.late_overrun = false;
+-    for (offset, expected) in [(-0.018, Judgement::Perfect), (0.018, Judgement::PerfectPlus), (-0.075, Judgement::Good), (0.075, Judgement::Perfect), (-0.150, Judgement::Bad), (0.150, Judgement::Good)] {
++    for (offset, expected) in [
++        (-0.018, Judgement::Perfect),
++        (0.018, Judgement::PerfectPlus),
++        (-0.075, Judgement::Good),
++        (0.075, Judgement::Perfect),
++        (-0.150, Judgement::Bad),
++        (0.150, Judgement::Good),
++    ] {
+         let mut engine = Engine::new(vec![spec(0, 0., Kind::Tap)]);
+         assert_eq!(scores(&step(&mut engine, &cfg, offset, &[finger(true, 0.)])), [(0, expected as u8)]);
+         if !matches!(expected, Judgement::Bad) {
+             let mut engine = Engine::new(vec![spec(0, 0., Kind::Hold)]);
+             let events = step(&mut engine, &cfg, offset, &[finger(true, 0.)]);
+-            assert!(events.iter().any(|e| matches!(e.action, Action::Head { judgement, .. } if judgement as u8 == expected as u8)), "Hold offset {offset}");
++            assert!(
++                events
++                    .iter()
++                    .any(|e| matches!(e.action, Action::Head { judgement, .. } if judgement as u8 == expected as u8)),
++                "Hold offset {offset}"
++            );
+         }
+     }
+     let mut engine = Engine::new(vec![spec(0, 0., Kind::Tap)]);
+@@ -34,7 +46,8 @@ fn asymmetric_special_windows_and_strict_frame_pad() {
+     }
+     for (offset, armed) in [(-0.081, false), (-0.079, true), (0.159, true), (0.161, false)] {
+         let mut engine = Engine::new(vec![spec(0, 0., Kind::Flick)]);
+-        let mut input = finger(false, 0.); input.keyboard = true;
++        let mut input = finger(false, 0.);
++        input.keyboard = true;
+         let events = step(&mut engine, &cfg, offset, &[input]);
+         if offset > 0.16 {
+             assert_eq!(scores(&events), [(0, Judgement::Miss as u8)]);
+@@ -47,8 +60,12 @@ fn asymmetric_special_windows_and_strict_frame_pad() {
+     cfg.phigros_rules.strict_early_ms = Some([30., 80., 130.]);
+     cfg.phigros_rules.strict_late_ms = Some([50., 100., 150.]);
+     let (windows, _) = Engine::new(Vec::new()).step(&cfg, 0., 0.020, 200., &[], |_, _| None);
+-    for (actual, expected) in windows.early[1..].iter().zip([0.040, 0.090, 0.140]) { assert!((actual - expected).abs() < 1e-12); }
+-    for (actual, expected) in windows.late[1..].iter().zip([0.060, 0.110, 0.160]) { assert!((actual - expected).abs() < 1e-12); }
++    for (actual, expected) in windows.early[1..].iter().zip([0.040, 0.090, 0.140]) {
++        assert!((actual - expected).abs() < 1e-12);
++    }
++    for (actual, expected) in windows.late[1..].iter().zip([0.060, 0.110, 0.160]) {
++        assert!((actual - expected).abs() < 1e-12);
++    }
+ }
+ 
+ fn config() -> Config {
+@@ -90,7 +107,9 @@ fn step(e: &mut Engine, cfg: &Config, now: f64, fingers: &[Finger]) -> Vec<Event
+ }
+ 
+ fn hold(e: &Engine, i: usize) -> &controls::HoldControl {
+-    let Control::Hold(control) = &e.note_update_manager.controls[i] else { panic!("expected a Hold control") };
++    let Control::Hold(control) = &e.note_update_manager.controls[i] else {
++        panic!("expected a Hold control")
++    };
+     control
+ }
+ 
+@@ -105,18 +124,38 @@ fn special(e: &Engine, i: usize) -> bool {
+ #[test]
+ fn separate_controls_use_native_type_order_and_score_once() {
+     let cfg = config();
+-    let mut e = Engine::new(vec![spec(0, 0., Kind::Flick), spec(1, 0., Kind::Hold), spec(2, 0., Kind::Drag), spec(3, 0., Kind::Tap)]);
++    let mut e = Engine::new(vec![
++        spec(0, 0., Kind::Flick),
++        spec(1, 0., Kind::Hold),
++        spec(2, 0., Kind::Drag),
++        spec(3, 0., Kind::Tap),
++    ]);
+     assert!(matches!(e.note_update_manager.controls[0], Control::Flick(_)));
+     assert!(matches!(e.note_update_manager.controls[1], Control::Hold(_)));
+     assert!(matches!(e.note_update_manager.controls[2], Control::Drag(_)));
+     assert!(matches!(e.note_update_manager.controls[3], Control::Click(_)));
+-    let mut fingers: Vec<_> = (0..4).map(|id| Finger { id, keyboard: id == 0, ..finger(true, 0.) }).collect();
+-    let events = e.step(&cfg, 0., 1. / 120., 200., &fingers, |target, finger| {
+-        (target.1 as usize == finger).then_some((0., 0.))
+-    }).1;
++    let mut fingers: Vec<_> = (0..4)
++        .map(|id| Finger {
++            id,
++            keyboard: id == 0,
++            ..finger(true, 0.)
++        })
++        .collect();
++    let events = e
++        .step(&cfg, 0., 1. / 120., 200., &fingers, |target, finger| (target.1 as usize == finger).then_some((0., 0.)))
++        .1;
+     assert_eq!(events.iter().map(|event| event.target.1).collect::<Vec<_>>(), [3, 2, 1, 0]);
+-    assert_eq!(scores(&events), [(3, Judgement::PerfectPlus as u8), (2, Judgement::Perfect as u8), (0, Judgement::Perfect as u8)]);
+-    for finger in &mut fingers { finger.started = false; }
++    assert_eq!(
++        scores(&events),
++        [
++            (3, Judgement::PerfectPlus as u8),
++            (2, Judgement::Perfect as u8),
++            (0, Judgement::Perfect as u8)
++        ]
++    );
++    for finger in &mut fingers {
++        finger.started = false;
++    }
+     assert!(step(&mut e, &cfg, 0.01, &fingers).is_empty());
+     assert_eq!(scores(&step(&mut e, &cfg, 0.781, &fingers)), [(1, Judgement::PerfectPlus as u8)]);
+     let events = step(&mut e, &cfg, 1., &fingers);
+@@ -204,7 +243,8 @@ fn multiple_protectors_and_same_frame_clicks_follow_the_article_sequence() {
+             assert_eq!(e.states[1].is_judged, protected && kind == Kind::Drag);
+         }
+         let mut e = Engine::new(vec![spec(0, 0., kind), spec(1, 0.05, Kind::Tap)]);
+-        let mut second = finger(true, 0.); second.id = 18;
++        let mut second = finger(true, 0.);
++        second.id = 18;
+         step(&mut e, &config(), -0.15, &[finger(true, 0.), second]);
+         assert_eq!(e.states[1].is_judged, kind == Kind::Drag);
+         assert!(!special(&e, 0), "two clicks outside Drag's held window cannot arm it");
+@@ -299,7 +339,13 @@ fn early_hold_can_absorb_clicks_on_later_frames() {
+     assert!(step(&mut e, &cfg, 0.81, &[finger(true, 0.)]).is_empty(), "the second click should match the Hold again, not Bad the Tap");
+     assert!(!e.states[1].is_judged);
+     let events = step(&mut e, &cfg, 0.85, &[finger(true, 0.)]);
+-    assert!(matches!(events[0].action, Action::Head { judgement: Judgement::Good, .. }));
++    assert!(matches!(
++        events[0].action,
++        Action::Head {
++            judgement: Judgement::Good,
++            ..
++        }
++    ));
+     assert!(e.states[0].is_judged);
+     assert_eq!(scores(&step(&mut e, &cfg, 0.86, &[finger(true, 0.)])), [(1, Judgement::Good as u8)]);
+ }
+@@ -518,8 +564,9 @@ fn ten_ms_tie_survives_chart_timestamp_subtraction() {
+     for base in [0., 1., 123.45] {
+         for (gap, expected) in [(0.009, 1), (0.01, 1), (0.011, 0)] {
+             let mut e = Engine::new(vec![spec(0, base, Kind::Tap), spec(1, base + gap, Kind::Tap)]);
+-            let events = e.step(&config(), base + 0.1, 1. / 120., 200., &[finger(true, 0.)],
+-                |target, _| Some((if target.1 == 0 { 0.5 } else { 0. }, 0.))).1;
++            let events = e
++                .step(&config(), base + 0.1, 1. / 120., 200., &[finger(true, 0.)], |target, _| Some((if target.1 == 0 { 0.5 } else { 0. }, 0.)))
++                .1;
+             assert_eq!(scores(&events)[0].0, expected, "base {base}, gap {gap}");
+         }
+         for (gap, protected) in [(0.009, false), (0.01, true), (0.011, true)] {
+@@ -532,12 +579,18 @@ fn ten_ms_tie_survives_chart_timestamp_subtraction() {
+ 
+ #[test]
+ fn custom_late_leniency_applies_to_all_head_note_types() {
+-    let mut cfg = config(); cfg.late_leniency_ms = 50.;
++    let mut cfg = config();
++    cfg.late_leniency_ms = 50.;
+     let mut e = Engine::new(vec![spec(0, 0., Kind::Tap)]);
+     assert_eq!(scores(&step(&mut e, &cfg, 0.22, &[finger(true, 0.)])), [(0, Judgement::Good as u8)]);
+     let mut e = Engine::new(vec![spec(0, 0., Kind::Hold)]);
+-    assert!(matches!(step(&mut e, &cfg, 0.22, &[finger(true, 0.)])[0].action,
+-        Action::Head { judgement: Judgement::Good, .. }));
++    assert!(matches!(
++        step(&mut e, &cfg, 0.22, &[finger(true, 0.)])[0].action,
++        Action::Head {
++            judgement: Judgement::Good,
++            ..
++        }
++    ));
+     let mut e = Engine::new(vec![spec(0, 0., Kind::Drag)]);
+     assert_eq!(scores(&step(&mut e, &cfg, 0.14, &[finger(false, 0.)])), [(0, Judgement::Perfect as u8)]);
+     // A future non-Flick keeps the normal range nonempty, so this checks real
+@@ -550,15 +603,25 @@ fn custom_late_leniency_applies_to_all_head_note_types() {
+ #[test]
+ fn extended_taps_and_hold_heads_keep_their_grade_and_perfect_plus_toggle() {
+     let mut cfg = config();
+-    cfg.lim_perfect_ms = 40.; cfg.lim_good_ms = 100.;
++    cfg.lim_perfect_ms = 40.;
++    cfg.lim_good_ms = 100.;
+     cfg.judge_grading.detailed = true;
+-    for (off, grade) in [(0.01, Judgement::PerfectPlus), (0.03, Judgement::Perfect), (0.05, Judgement::Great), (0.09, Judgement::Good), (0.12, Judgement::Ok), (0.15, Judgement::Meh)] {
++    for (off, grade) in [
++        (0.01, Judgement::PerfectPlus),
++        (0.03, Judgement::Perfect),
++        (0.05, Judgement::Great),
++        (0.09, Judgement::Good),
++        (0.12, Judgement::Ok),
++        (0.15, Judgement::Meh),
++    ] {
+         for sign in [-1., 1.] {
+             let mut engine = Engine::new(vec![spec(0, 0., Kind::Tap)]);
+             assert_eq!(scores(&step(&mut engine, &cfg, off * sign, &[finger(true, 0.)])), [(0, grade as u8)]);
+             let mut engine = Engine::new(vec![spec(0, 0., Kind::Hold)]);
+             let events = step(&mut engine, &cfg, off * sign, &[finger(true, 0.)]);
+-            assert!(events.iter().any(|e| matches!(e.action, Action::Head { judgement, .. } if judgement as u8 == grade as u8)));
++            assert!(events
++                .iter()
++                .any(|e| matches!(e.action, Action::Head { judgement, .. } if judgement as u8 == grade as u8)));
+             assert_eq!(scores(&step(&mut engine, &cfg, 0.81, &[finger(false, 0.)])), [(0, grade as u8)]);
+         }
+     }
+diff --git a/prpr/src/lib.rs b/prpr/src/lib.rs
+index 5c0cb5e..e7fcbbf 100644
+--- a/prpr/src/lib.rs
++++ b/prpr/src/lib.rs
+@@ -5,9 +5,9 @@ pub mod config;
+ pub mod core;
+ pub mod course;
+ pub mod diagnostics;
++pub mod dir;
+ #[cfg(any(target_os = "ios", test))]
+ mod display_timing;
+-pub mod dir;
+ pub mod ext;
+ pub mod extensions;
+ #[cfg(any(target_os = "ios", test))]
+diff --git a/prpr/src/loading_work.rs b/prpr/src/loading_work.rs
+index 16ca4a4..69fe1d3 100644
+--- a/prpr/src/loading_work.rs
++++ b/prpr/src/loading_work.rs
+@@ -1,7 +1,7 @@
+ //! CPU-only loading work. Never capture textures, GL state or audio devices.
+-use anyhow::Result;
+ #[cfg(not(target_arch = "wasm32"))]
+ use anyhow::Context;
++use anyhow::Result;
+ #[cfg(not(target_arch = "wasm32"))]
+ use std::future::Future;
+ 
+diff --git a/prpr/src/practice/audio.rs b/prpr/src/practice/audio.rs
+index e4c6e22..7d4eb51 100644
+--- a/prpr/src/practice/audio.rs
++++ b/prpr/src/practice/audio.rs
+@@ -54,6 +54,13 @@ impl Player {
+             }
+         }
+     }
++    pub fn set_amplifier(&mut self, amplifier: f32) -> Result<()> {
++        let amplifier = amplifier.clamp(0., 1.);
++        match self {
++            Self::Native(m) => m.set_amplifier(amplifier),
++            Self::Practice(m) => m.send(Command::Amplifier(amplifier)),
++        }
++    }
+     pub fn try_set_playback_rate(&mut self, rate: f64) -> bool {
+         match self {
+             Self::Native(m) => m.try_set_playback_rate(rate),
+@@ -98,6 +105,7 @@ enum Command {
+     Pause(bool),
+     Seek(f64),
+     Rate(f64),
++    Amplifier(f32),
+     Options(bool, bool),
+     Filter(Option<f32>, f32, f32),
+     Schedule(Vec<(f64, AudioClip)>),
+@@ -180,6 +188,7 @@ impl Stream {
+                     self.rate = r;
+                     self.reset();
+                 }
++                Command::Amplifier(amplifier) => self.amplifier = amplifier.clamp(0., 1.),
+                 Command::Options(p, c) => {
+                     if self.pitch != p {
+                         self.primed = false;
+diff --git a/prpr/src/ui/text/layout.rs b/prpr/src/ui/text/layout.rs
+index 560be58..5d378fe 100644
+--- a/prpr/src/ui/text/layout.rs
++++ b/prpr/src/ui/text/layout.rs
+@@ -343,13 +343,18 @@ mod tests {
+     fn repeated_ui_labels_benchmark() {
+         let (mut brush, mut cache, options) = setup();
+         let labels = ["UNRATED", "主界面 Play", "1000000", "霜月Frostone", "游玩设置 Settings", "PERFECT+"];
+-        for label in labels { layout_text(&mut brush, &mut cache, label, options); }
++        for label in labels {
++            layout_text(&mut brush, &mut cache, label, options);
++        }
+         for cached in [false, true] {
+             let start = std::time::Instant::now();
+             for i in 0..60000 {
+                 let label = labels[i % labels.len()];
+-                let result = if cached { layout_text(&mut brush, &mut cache, label, options) }
+-                    else { layout_uncached(&mut brush, &mut cache, label, options) };
++                let result = if cached {
++                    layout_text(&mut brush, &mut cache, label, options)
++                } else {
++                    layout_uncached(&mut brush, &mut cache, label, options)
++                };
+                 std::hint::black_box(result);
+             }
+             println!("cached={cached}: {:.3} ms for 60000 labels", start.elapsed().as_secs_f64() * 1000.);
