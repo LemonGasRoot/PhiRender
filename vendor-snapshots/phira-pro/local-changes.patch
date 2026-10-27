@@ -507,7 +507,7 @@ index 7dd7d65..0909a8b 100644
      let out = if png_dir.is_some() { out } else { out };
      let mut renderer = match finish(ChartVideoRenderer::new(chart, opts, out.clone())).await {
 diff --git a/prpr/src/chart_video.rs b/prpr/src/chart_video.rs
-index 5c6a491..f671e81 100644
+index 5c6a491..936b799 100644
 --- a/prpr/src/chart_video.rs
 +++ b/prpr/src/chart_video.rs
 @@ -1,8 +1,8 @@
@@ -575,7 +575,7 @@ index 5c6a491..f671e81 100644
              end: None,
              hitsound: true,
 -            show_hud: false,
-+            hitsound_volume: 3.,
++            hitsound_volume: 1.5,
 +            show_hud: true,
 +            show_accuracy: false,
 +            show_offset_indicator: false,
@@ -1520,32 +1520,44 @@ index e4c6e22..7d4eb51 100644
                      if self.pitch != p {
                          self.primed = false;
 diff --git a/prpr/src/scene/game.rs b/prpr/src/scene/game.rs
-index 4e87bc5..3dddd27 100644
+index 4e87bc5..ce3a374 100644
 --- a/prpr/src/scene/game.rs
 +++ b/prpr/src/scene/game.rs
-@@ -27,7 +27,7 @@ use crate::practice::{
+@@ -27,7 +27,9 @@ use crate::practice::{
  use crate::{
      bin::BinaryReader,
      config::{Config, Mods},
 -    core::{copy_fbo, BadNote, Chart, ChartExtra, Effect, JudgeLineKind, Matrix, NoteKind, Point, Resource, UIElement, Vector, PGR_FONT},
-+    core::{copy_fbo, BadNote, Chart, ChartExtra, Effect, JudgeLineKind, Matrix, NoteKind, Point, Resource, UIElement, Vector, HUD_INFO_FONT, PGR_FONT},
++    core::{
++        copy_fbo, BadNote, Chart, ChartExtra, Effect, JudgeLineKind, Matrix, NoteKind, Point, Resource, UIElement, Vector, HUD_INFO_FONT, PGR_FONT,
++    },
      ext::{parse_time, screen_aspect, semi_white, spawn_task, RectExt, SafeTexture, ScaleType},
      fs::FileSystem,
      info::{ChartFormat, ChartInfo},
-@@ -1352,26 +1352,28 @@ impl GameScene {
+@@ -1351,28 +1353,42 @@ impl GameScene {
+             // magic to make score visible, refer to phira/src/rate.rs#L219
              ui.text("").draw_using(&PGR_FONT);
              let lf = -1. + margin;
++            let info_left = lf + 0.04;
++            let info_right = -lf - 0.04;
              let bt = -top - eps * 2.8 + (1. - p) * 0.4;
-+            let info_text_size = 0.7;
-+            let info_font = if HUD_INFO_FONT.with(|font| font.borrow().is_some()) { &HUD_INFO_FONT } else { &PGR_FONT };
++            let info_text_size = 0.62;
++            let info_font = if HUD_INFO_FONT.with(|font| font.borrow().is_some()) {
++                &HUD_INFO_FONT
++            } else {
++                &PGR_FONT
++            };
              let scale_point = legacy_aui.then(|| {
 -                let ct = ui.text(&res.info.name).size(0.5).measure().center();
+-                (lf + ct.x, bt - ct.y)
 +                let ct = ui.text(&res.info.name).size(info_text_size).measure_using(info_font).center();
-                 (lf + ct.x, bt - ct.y)
++                (info_left + ct.x, bt - ct.y)
              });
-             self.chart.with_element(ui, res, UIElement::Name, scale_point, (lf, bt), |ui, c| {
+-            self.chart.with_element(ui, res, UIElement::Name, scale_point, (lf, bt), |ui, c| {
++            self.chart.with_element(ui, res, UIElement::Name, scale_point, (info_left, bt), |ui, c| {
                  ui.text(&res.info.name)
-                     .pos(lf, bt)
+-                    .pos(lf, bt)
++                    .pos(info_left, bt)
                      .anchor(0., 1.)
 -                    .size(0.5)
 +                    .size(info_text_size)
@@ -1557,15 +1569,25 @@ index 4e87bc5..3dddd27 100644
  
              let scale_point = legacy_aui.then(|| {
 -                let ct = ui.text(&res.info.level).size(0.5).measure().center();
-+                let ct = ui.text(&res.info.level).size(info_text_size).measure_using(info_font).center();
-                 (-lf - ct.x, bt - ct.y)
-             });
-             self.chart.with_element(ui, res, UIElement::Level, scale_point, (-lf, bt), |ui, c| {
+-                (-lf - ct.x, bt - ct.y)
+-            });
+-            self.chart.with_element(ui, res, UIElement::Level, scale_point, (-lf, bt), |ui, c| {
 -                ui.text(&res.info.level).pos(-lf, bt).anchor(1., 1.).size(0.5).color(c).draw();
-+                ui.text(&res.info.level).pos(-lf, bt).anchor(1., 1.).size(info_text_size).color(c).draw_using(info_font);
++                let ct = ui.text(&res.info.level).size(info_text_size).measure_using(info_font).center();
++                (info_right - ct.x, bt - ct.y)
              });
++            self.chart
++                .with_element(ui, res, UIElement::Level, scale_point, (info_right, bt), |ui, c| {
++                    ui.text(&res.info.level)
++                        .pos(info_right, bt)
++                        .anchor(1., 1.)
++                        .size(info_text_size)
++                        .color(c)
++                        .draw_using(info_font);
++                });
  
              let hw = 0.003;
+             let height = eps * 1.0;
 diff --git a/prpr/src/ui/text/layout.rs b/prpr/src/ui/text/layout.rs
 index 560be58..5d378fe 100644
 --- a/prpr/src/ui/text/layout.rs
