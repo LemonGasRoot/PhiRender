@@ -507,7 +507,7 @@ index 7dd7d65..0909a8b 100644
      let out = if png_dir.is_some() { out } else { out };
      let mut renderer = match finish(ChartVideoRenderer::new(chart, opts, out.clone())).await {
 diff --git a/prpr/src/chart_video.rs b/prpr/src/chart_video.rs
-index 5c6a491..936b799 100644
+index 5c6a491..d380c37 100644
 --- a/prpr/src/chart_video.rs
 +++ b/prpr/src/chart_video.rs
 @@ -1,8 +1,8 @@
@@ -575,7 +575,7 @@ index 5c6a491..936b799 100644
              end: None,
              hitsound: true,
 -            show_hud: false,
-+            hitsound_volume: 1.5,
++            hitsound_volume: 1.0,
 +            show_hud: true,
 +            show_accuracy: false,
 +            show_offset_indicator: false,
@@ -590,8 +590,8 @@ index 5c6a491..936b799 100644
          if !self.start.is_finite() || self.start < 0. {
              bail!("起始时间无效");
          }
-+        if !self.hitsound_volume.is_finite() || !(0.0..=8.0).contains(&self.hitsound_volume) {
-+            bail!("打击音音量必须在 0 至 8 倍之间");
++        if !self.hitsound_volume.is_finite() || !(0.0..=3.0).contains(&self.hitsound_volume) {
++            bail!("打击音音量必须在 0 至 3 倍之间");
 +        }
          Ok(())
      }
@@ -647,7 +647,21 @@ index 5c6a491..936b799 100644
                      .arg("-map")
                      .arg("0:v")
                      .arg("-map")
-@@ -269,16 +333,32 @@ pub struct ChartVideoRenderer {
+@@ -222,7 +286,12 @@ impl Encoder {
+                 cmd.arg("-c:a").arg("aac").arg("-b:a").arg("192k").arg("-af").arg("apad");
+             }
+             (false, true) => {
+-                cmd.arg("-c:a").arg("aac").arg("-b:a").arg("192k");
++                cmd.arg("-c:a")
++                    .arg("aac")
++                    .arg("-b:a")
++                    .arg("192k")
++                    .arg("-af")
++                    .arg("alimiter=limit=0.95:level=false");
+             }
+             (false, false) => {}
+         }
+@@ -269,16 +338,32 @@ pub struct ChartVideoRenderer {
      hitsound_temp: Option<PathBuf>,
      buf: Vec<u8>,
      title: String,
@@ -680,7 +694,7 @@ index 5c6a491..936b799 100644
          // 没有曲绘时用一个纯色贴图兜底，谱面本身仍然可以渲染。
          let (illustration, background) = match LoadingScene::load(fs.as_mut(), &info.illustration).await {
              Ok((illustration, background, _)) => (illustration, background),
-@@ -289,7 +369,7 @@ impl ChartVideoRenderer {
+@@ -289,7 +374,7 @@ impl ChartVideoRenderer {
              }
          };
  
@@ -689,7 +703,7 @@ index 5c6a491..936b799 100644
              match fs.load_file(&info.music).await {
                  Ok(bytes) => {
                      let ext = Path::new(&info.music)
-@@ -317,8 +397,8 @@ impl ChartVideoRenderer {
+@@ -317,8 +402,8 @@ impl ChartVideoRenderer {
  
          let mut config = Config::default();
          config.mods = Mods::AUTOPLAY;
@@ -700,7 +714,7 @@ index 5c6a491..936b799 100644
          config.sample_count = opts.sample_count.clamp(1, 8);
          config.show_avg_fps = false;
          config.show_fps = false;
-@@ -326,6 +406,9 @@ impl ChartVideoRenderer {
+@@ -326,6 +411,9 @@ impl ChartVideoRenderer {
          config.speed = 1.;
          config.adjust_time = false;
          config.interactive = false;
@@ -710,7 +724,7 @@ index 5c6a491..936b799 100644
  
          let mut scene = GameScene::new(GameMode::View, info, config, fs, None, background, illustration, None, None, None)
              .await
-@@ -346,8 +429,8 @@ impl ChartVideoRenderer {
+@@ -346,8 +434,8 @@ impl ChartVideoRenderer {
          }
          // 打击音的时间点只和谱面有关，渲染前先混成一条音轨，
          // 再由 ffmpeg 跟音乐一起 amix。
@@ -721,7 +735,7 @@ index 5c6a491..936b799 100644
                  Ok(path) => Some(path),
                  Err(err) => {
                      tracing::warn!("打击音混音失败，本次不带打击音：{err:?}");
-@@ -358,10 +441,14 @@ impl ChartVideoRenderer {
+@@ -358,10 +446,14 @@ impl ChartVideoRenderer {
              None
          };
          let title = scene.res.info.name.clone();
@@ -740,7 +754,7 @@ index 5c6a491..936b799 100644
          let buf = vec![0; opts.width as usize * opts.height as usize * 4];
  
          Ok(Self {
-@@ -375,12 +462,16 @@ impl ChartVideoRenderer {
+@@ -375,12 +467,16 @@ impl ChartVideoRenderer {
              duration,
              total_frames,
              frame: 0,
@@ -759,7 +773,7 @@ index 5c6a491..936b799 100644
          })
      }
  
-@@ -396,6 +487,69 @@ impl ChartVideoRenderer {
+@@ -396,6 +492,69 @@ impl ChartVideoRenderer {
          self.duration
      }
  
@@ -829,7 +843,7 @@ index 5c6a491..936b799 100644
      pub fn options(&self) -> &VideoOptions {
          &self.opts
      }
-@@ -416,10 +570,30 @@ impl ChartVideoRenderer {
+@@ -416,10 +575,30 @@ impl ChartVideoRenderer {
  
      /// 渲染下一帧（不调用 `next_frame`，可在同一渲染帧内连续调用）。
      pub fn render_next_frame(&mut self, painter: &mut TextPainter) -> Result<()> {
@@ -860,7 +874,7 @@ index 5c6a491..936b799 100644
          let time = music_time - self.offset;
          self.scene.res.time = time;
          self.scene.res.alpha = 1.;
-@@ -432,11 +606,14 @@ impl ChartVideoRenderer {
+@@ -432,11 +611,14 @@ impl ChartVideoRenderer {
              self.scene.render(&mut self.tm, &mut ui).context("渲染谱面失败")?;
          }
          unsafe { get_internal_gl() }.flush();
@@ -879,7 +893,40 @@ index 5c6a491..936b799 100644
          Ok(())
      }
  
-@@ -522,31 +699,14 @@ fn write_wav(path: &Path, frames: &[Frame], rate: u32) -> std::io::Result<()> {
+@@ -497,56 +679,37 @@ impl Drop for ChartVideoRenderer {
+ /// 打击音的混音采样率。
+ const HITSOUND_RATE: u32 = 44100;
+ 
+-/// 把这些帧写成一个 16 位 PCM 的 wav 文件（sasa 的帧是 f32 立体声）。
++/// 将打击音写成 32 位浮点 WAV，保留和弦叠加峰值供最终混音器统一限幅。
+ fn write_wav(path: &Path, frames: &[Frame], rate: u32) -> std::io::Result<()> {
+-    let data_len = (frames.len() * 4) as u32;
++    let data_len = (frames.len() * 8) as u32;
+     let mut out = Vec::with_capacity(44 + data_len as usize);
+     out.extend_from_slice(b"RIFF");
+     out.extend_from_slice(&(36 + data_len).to_le_bytes());
+     out.extend_from_slice(b"WAVEfmt ");
+     out.extend_from_slice(&16u32.to_le_bytes());
+-    out.extend_from_slice(&1u16.to_le_bytes());
++    out.extend_from_slice(&3u16.to_le_bytes());
+     out.extend_from_slice(&2u16.to_le_bytes());
+     out.extend_from_slice(&rate.to_le_bytes());
+-    out.extend_from_slice(&(rate * 4).to_le_bytes());
+-    out.extend_from_slice(&4u16.to_le_bytes());
+-    out.extend_from_slice(&16u16.to_le_bytes());
++    out.extend_from_slice(&(rate * 8).to_le_bytes());
++    out.extend_from_slice(&8u16.to_le_bytes());
++    out.extend_from_slice(&32u16.to_le_bytes());
+     out.extend_from_slice(b"data");
+     out.extend_from_slice(&data_len.to_le_bytes());
+     for frame in frames {
+-        for sample in [frame.0, frame.1] {
+-            let value = (sample.clamp(-1., 1.) * i16::MAX as f32) as i16;
+-            out.extend_from_slice(&value.to_le_bytes());
+-        }
++        out.extend_from_slice(&frame.0.to_le_bytes());
++        out.extend_from_slice(&frame.1.to_le_bytes());
+     }
      std::fs::write(path, out)
  }
  
@@ -912,7 +959,7 @@ index 5c6a491..936b799 100644
      let mut mix = vec![Frame::default(); total];
      for line in &chart.lines {
          for note in &line.notes {
-@@ -559,11 +719,11 @@ async fn write_hitsound(chart: &Chart, offset: f64, start: f64, duration: f64) -
+@@ -559,11 +722,11 @@ async fn write_hitsound(chart: &Chart, offset: f64, start: f64, duration: f64) -
              }
              let clip = match &note.hitsound {
                  HitSound::None => continue,
@@ -929,7 +976,7 @@ index 5c6a491..936b799 100644
              };
              let begin = (at * HITSOUND_RATE as f64).round() as usize;
              let len = (clip.length() * HITSOUND_RATE as f64).ceil() as usize;
-@@ -577,13 +737,12 @@ async fn write_hitsound(chart: &Chart, offset: f64, start: f64, duration: f64) -
+@@ -577,13 +740,11 @@ async fn write_hitsound(chart: &Chart, offset: f64, start: f64, duration: f64) -
              }
          }
      }
@@ -940,12 +987,11 @@ index 5c6a491..936b799 100644
 -        for frame in &mut mix {
 -            *frame = *frame * gain;
 -        }
-+    // 全轨统一降低会抵消用户的音量增益，因此在提升音量后逐样本软限幅。
-+    let gain = volume.clamp(0., 8.);
-+    const CEILING: f32 = 0.88;
++    // 保持线性增益，不在这里削波；歌曲与打击音合并后只由编码器侧限幅一次。
++    let gain = volume.clamp(0., 3.);
 +    for frame in &mut mix {
-+        frame.0 = (frame.0 * gain / CEILING).tanh() * CEILING;
-+        frame.1 = (frame.1 * gain / CEILING).tanh() * CEILING;
++        frame.0 *= gain;
++        frame.1 *= gain;
      }
      let path = std::env::temp_dir().join(format!("phira-hitsound-{}.wav", uuid::Uuid::new_v4()));
      write_wav(&path, &mix, HITSOUND_RATE).with_context(|| format!("无法写入打击音轨道：{}", path.display()))?;

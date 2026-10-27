@@ -48,7 +48,7 @@ impl Default for Settings {
             click_sound: None,
             drag_sound: None,
             flick_sound: None,
-            hitsound_volume: 1.5,
+            hitsound_volume: 1.0,
             hitsounds: true,
             show_hud: true,
             include_audio: true,
@@ -162,9 +162,9 @@ fn initial_state() -> Inner {
     if settings.settings_version == 0 {
         settings.nvenc = true;
     }
-    if settings.settings_version < 3 {
-        settings.hitsound_volume = settings.hitsound_volume.min(1.5);
-        settings.settings_version = 3;
+    if settings.settings_version < 4 {
+        settings.hitsound_volume = settings.hitsound_volume.min(1.0);
+        settings.settings_version = 4;
     }
     if settings.skin.is_none() {
         let phira = root.join("work/Phira-Pro/assets/respack");
@@ -339,7 +339,7 @@ fn get_settings(state: State<'_, AppState>) -> Settings {
 fn save_settings(state: State<'_, AppState>, settings: Settings) -> Result<(), String> {
     if !["light", "dark", "system"].contains(&settings.theme.as_str())
         || !settings.hitsound_volume.is_finite()
-        || !(0.0..=8.0).contains(&settings.hitsound_volume)
+        || !(0.0..=3.0).contains(&settings.hitsound_volume)
         || ![30, 60, 120].contains(&settings.fps)
         || ![(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)]
             .contains(&(settings.width, settings.height))
