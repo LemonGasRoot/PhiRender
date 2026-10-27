@@ -10,8 +10,10 @@ wrapper around the command-line renderer.
 ## Current capabilities
 
 - Open official, RPE and RPEN JSON/PEZ and display conversion diagnostics.
-- Automatically generate a playable full-chart 720p/30 FPS preview video on
-  import, or turn automatic generation off and start it manually. The preview
+- Automatically generate a playable full-chart 720p/30 FPS preview video in
+  the background on import, or turn automatic generation off and start it
+  manually. A separate single-frame preview remains available while it runs.
+  The preview
   uses the same GPU drawing and encoding path as video export; GPU frames are
   read back before encoding. Playback starts after generation completes.
 - Export MP4 in a background GPU worker using the existing FFmpeg software or

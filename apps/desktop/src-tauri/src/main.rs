@@ -99,6 +99,8 @@ struct Inner {
     chart: Option<Chart>,
     task: TaskView,
     stdin: Option<ChildStdin>,
+    preview_task: TaskView,
+    preview_stdin: Option<ChildStdin>,
     preview_path: Option<PathBuf>,
     preview_video_path: Option<PathBuf>,
     music: Option<PathBuf>,
@@ -183,6 +185,8 @@ fn initial_state() -> Inner {
         chart: None,
         task: TaskView::default(),
         stdin: None,
+        preview_task: TaskView::default(),
+        preview_stdin: None,
         preview_path: None,
         preview_video_path: None,
         music: None,
@@ -355,8 +359,8 @@ async fn open_chart(state: State<'_, AppState>) -> Result<Option<ChartView>, Str
         };
         let cache = {
             let inner = shared.lock().unwrap();
-            if inner.stdin.is_some() {
-                return Err("请先结束当前渲染任务".into());
+            if inner.stdin.is_some() || inner.preview_stdin.is_some() {
+                return Err("请先结束当前渲染任务和后台预览视频".into());
             }
             inner.cache.clone()
         };
@@ -372,6 +376,7 @@ async fn open_chart(state: State<'_, AppState>) -> Result<Option<ChartView>, Str
             let _ = std::fs::remove_file(old);
         }
         inner.task = TaskView::default();
+        inner.preview_task = TaskView::default();
         Ok(Some(view))
     })
     .await
@@ -389,8 +394,8 @@ async fn attach_music(state: State<'_, AppState>) -> Result<Option<ChartView>, S
         };
         let (source, cache) = {
             let inner = shared.lock().unwrap();
-            if inner.stdin.is_some() {
-                return Err("请先结束当前渲染任务".into());
+            if inner.stdin.is_some() || inner.preview_stdin.is_some() {
+                return Err("请先结束当前渲染任务和后台预览视频".into());
             }
             let chart = inner.chart.as_ref().ok_or("请先打开 JSON 谱面")?;
             (PathBuf::from(&chart.view.source), inner.cache.clone())
@@ -509,6 +514,10 @@ fn get_task(state: State<'_, AppState>) -> TaskView {
     state.0.lock().unwrap().task.clone()
 }
 #[tauri::command]
+fn get_preview_task(state: State<'_, AppState>) -> TaskView {
+    state.0.lock().unwrap().preview_task.clone()
+}
+#[tauri::command]
 fn get_preview_frame(state: State<'_, AppState>) -> Result<Vec<u8>, String> {
     let path = state
         .0
@@ -549,7 +558,12 @@ fn start_task(
     output: Option<PathBuf>,
 ) -> Result<(), String> {
     let mut inner = shared.lock().unwrap();
-    if inner.stdin.is_some() {
+    let background = kind == "preview_video";
+    if if background {
+        inner.preview_stdin.is_some()
+    } else {
+        inner.stdin.is_some()
+    } {
         return Err("已有渲染任务正在运行".into());
     }
     let chart = inner.chart.as_ref().ok_or("请先打开谱面")?;
@@ -631,13 +645,19 @@ fn start_task(
         .spawn()
         .map_err(|e| format!("无法启动 GPU 渲染组件：{e}"))?;
     let stdout = child.stdout.take().ok_or("无法读取渲染任务状态")?;
-    inner.stdin = child.stdin.take();
-    inner.task = TaskView {
+    let task = TaskView {
         kind: kind.into(),
         status: "loading".into(),
         message: "正在加载渲染场景…".into(),
         ..Default::default()
     };
+    if background {
+        inner.preview_stdin = child.stdin.take();
+        inner.preview_task = task;
+    } else {
+        inner.stdin = child.stdin.take();
+        inner.task = task;
+    }
     drop(inner);
     let kind = kind.to_owned();
     std::thread::spawn(move || {
@@ -648,16 +668,21 @@ fn start_task(
             let mut inner = shared.lock().unwrap();
             match v["type"].as_str().unwrap_or("") {
                 "progress" => {
-                    inner.task.status = "running".into();
-                    inner.task.message = if kind == "preview_video" {
+                    let task = if background {
+                        &mut inner.preview_task
+                    } else {
+                        &mut inner.task
+                    };
+                    task.status = "running".into();
+                    task.message = if background {
                         "正在生成 720p 预览视频"
                     } else {
                         "正在导出视频"
                     }
                     .into();
-                    inner.task.frame = v["frame"].as_u64().unwrap_or(0);
-                    inner.task.total = v["total"].as_u64().unwrap_or(0);
-                    inner.task.elapsed = v["elapsed"].as_f64().unwrap_or(0.);
+                    task.frame = v["frame"].as_u64().unwrap_or(0);
+                    task.total = v["total"].as_u64().unwrap_or(0);
+                    task.elapsed = v["elapsed"].as_f64().unwrap_or(0.);
                 }
                 "preview" => {
                     if let Some(old) = inner.preview_path.replace(dest.clone()) {
@@ -674,9 +699,9 @@ fn start_task(
                         if let Some(old) = inner.preview_video_path.replace(dest.clone()) {
                             let _ = std::fs::remove_file(old);
                         }
-                        inner.task.status = "ready".into();
-                        inner.task.message = "预览视频已就绪".into();
-                        inner.task.output = Some(dest.to_string_lossy().into_owned());
+                        inner.preview_task.status = "ready".into();
+                        inner.preview_task.message = "预览视频已就绪".into();
+                        inner.preview_task.output = Some(dest.to_string_lossy().into_owned());
                         continue;
                     }
                     let result =
@@ -703,13 +728,23 @@ fn start_task(
                     }
                 }
                 "cancelled" => {
-                    inner.task.status = "cancelled".into();
-                    inner.task.message = "任务已取消".into();
+                    let task = if background {
+                        &mut inner.preview_task
+                    } else {
+                        &mut inner.task
+                    };
+                    task.status = "cancelled".into();
+                    task.message = "任务已取消".into();
                 }
                 "error" => {
-                    inner.task.status = "error".into();
+                    let task = if background {
+                        &mut inner.preview_task
+                    } else {
+                        &mut inner.task
+                    };
+                    task.status = "error".into();
                     let error = v["message"].as_str().unwrap_or("渲染失败");
-                    inner.task.message = if using_nvenc {
+                    task.message = if using_nvenc && background || using_nvenc && kind == "export" {
                         format!(
                             "{error}。如果 NVIDIA 编码不可用，请在设置中选择软件 H.264 后重试。"
                         )
@@ -723,13 +758,22 @@ fn start_task(
         let result = child.wait();
         let _ = std::fs::remove_file(job_path);
         let mut inner = shared.lock().unwrap();
-        inner.stdin = None;
+        if background {
+            inner.preview_stdin = None;
+        } else {
+            inner.stdin = None;
+        }
+        let task = if background {
+            &mut inner.preview_task
+        } else {
+            &mut inner.task
+        };
         if !matches!(
-            inner.task.status.as_str(),
+            task.status.as_str(),
             "ready" | "done" | "error" | "cancelled"
         ) {
-            inner.task.status = "error".into();
-            inner.task.message = format!("{}任务意外退出：{:?}", kind, result);
+            task.status = "error".into();
+            task.message = format!("{}任务意外退出：{:?}", kind, result);
         }
     });
     Ok(())
@@ -836,6 +880,18 @@ fn cancel_task(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 #[tauri::command]
+fn cancel_preview_video(state: State<'_, AppState>) -> Result<(), String> {
+    let mut inner = state.0.lock().unwrap();
+    let stdin = inner
+        .preview_stdin
+        .as_mut()
+        .ok_or("没有正在生成的预览视频")?;
+    stdin.write_all(b"cancel\n").map_err(msg)?;
+    stdin.flush().map_err(msg)?;
+    inner.preview_task.message = "正在取消预览视频…".into();
+    Ok(())
+}
+#[tauri::command]
 async fn convert_chart(
     state: State<'_, AppState>,
     archive_mode: bool,
@@ -914,12 +970,14 @@ fn main() {
             choose_skin,
             default_skin,
             get_task,
+            get_preview_task,
             get_preview_frame,
             get_preview_video,
             start_preview,
             start_preview_video,
             start_export,
             cancel_task,
+            cancel_preview_video,
             convert_chart
         ])
         .run(tauri::generate_context!())
