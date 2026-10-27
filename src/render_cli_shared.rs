@@ -6,7 +6,7 @@ use phigros_rpen_converter::{
 };
 use prpr::{
     chart_video::{ChartVideoRenderer, VideoEncoder, VideoOptions},
-    core::{BOLD_FONT, PGR_FONT},
+    core::{BOLD_FONT, HUD_INFO_FONT, PGR_FONT},
     ext::poll_future,
     ui::{FontArc, TextPainter},
 };
@@ -83,6 +83,9 @@ struct RenderArgs {
     /// Optional Phira resource-pack directory or ZIP.
     #[arg(long)]
     skin: Option<PathBuf>,
+    /// Font for the song title and difficulty. Defaults to saira-regular.ttf beside the executable.
+    #[arg(long)]
+    font: Option<PathBuf>,
     /// Optional ffmpeg executable path.
     #[arg(long)]
     ffmpeg: Option<PathBuf>,
@@ -168,6 +171,24 @@ async fn run_inner(mode: RunMode) -> Result<()> {
             format!("Could not read renderer font {}", pgr_font_path.display())
         })?)
         .map_err(|error| anyhow!("Could not load Phigros font: {error}"))?;
+    let hud_font_path = args.font.clone().or_else(|| {
+        std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(|parent| parent.join("saira-regular.ttf")))
+            .filter(|path| path.is_file())
+    });
+    let hud_font = if let Some(path) = hud_font_path {
+        FontArc::try_from_vec(
+            std::fs::read(&path)
+                .with_context(|| format!("Could not read HUD font {}", path.display()))?,
+        )
+        .map_err(|error| anyhow!("Could not load HUD font {}: {error}", path.display()))?
+    } else {
+        pgr_font.clone()
+    };
+    let mut hud_painter = TextPainter::new(hud_font, Some(font.clone()));
+    hud_painter.normalize_to(&pgr_font);
+    HUD_INFO_FONT.with(|slot| *slot.borrow_mut() = Some(hud_painter));
     PGR_FONT.with(|slot| {
         *slot.borrow_mut() = Some(TextPainter::new(pgr_font, Some(font.clone())));
     });
