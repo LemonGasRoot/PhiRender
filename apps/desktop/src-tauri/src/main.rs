@@ -28,6 +28,7 @@ struct Settings {
     click_sound: Option<String>,
     drag_sound: Option<String>,
     flick_sound: Option<String>,
+    music_volume: f32,
     hitsound_volume: f32,
     hitsounds: bool,
     show_hud: bool,
@@ -49,7 +50,8 @@ impl Default for Settings {
             click_sound: None,
             drag_sound: None,
             flick_sound: None,
-            hitsound_volume: 1.0,
+            music_volume: 1.0,
+            hitsound_volume: 0.5,
             hitsounds: true,
             show_hud: true,
             include_audio: true,
@@ -111,6 +113,39 @@ struct AppState(Arc<Mutex<Inner>>);
 
 fn msg(e: impl std::fmt::Display) -> String {
     e.to_string()
+}
+fn replace_output(source: &Path, destination: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
+        }
+        const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
+        const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+        let source: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+        let destination: Vec<u16> = destination
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+        let succeeded = unsafe {
+            MoveFileExW(
+                source.as_ptr(),
+                destination.as_ptr(),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            )
+        };
+        if succeeded == 0 {
+            return Err(msg(std::io::Error::last_os_error()));
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::rename(source, destination).map_err(msg)
+    }
 }
 fn format_name(f: ChartFormat) -> String {
     match f {
@@ -175,6 +210,11 @@ fn initial_state() -> Inner {
     if settings.settings_version < 6 {
         settings.hitsound_volume = settings.hitsound_volume.min(0.35);
         settings.settings_version = 6;
+    }
+    if settings.settings_version < 7 {
+        settings.music_volume = 1.0;
+        settings.hitsound_volume = 0.5;
+        settings.settings_version = 7;
     }
     if settings.skin.is_none() {
         let phira = root.join("work/Phira-Pro/assets/respack");
@@ -348,8 +388,10 @@ fn get_settings(state: State<'_, AppState>) -> Settings {
 #[tauri::command]
 fn save_settings(state: State<'_, AppState>, settings: Settings) -> Result<(), String> {
     if !["light", "dark", "system"].contains(&settings.theme.as_str())
+        || !settings.music_volume.is_finite()
+        || !(0.0..=2.0).contains(&settings.music_volume)
         || !settings.hitsound_volume.is_finite()
-        || !(0.0..=1.0).contains(&settings.hitsound_volume)
+        || !(0.0..=2.0).contains(&settings.hitsound_volume)
         || ![30, 60, 120].contains(&settings.fps)
         || ![480, 720, 1080].contains(&settings.preview_resolution)
         || ![(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)]
@@ -600,9 +642,6 @@ fn start_task(
             .join(format!("audio-{}-{id}.m4a", std::process::id()))
     } else {
         let final_path = output.as_ref().ok_or("没有选择输出文件")?;
-        if final_path.exists() {
-            return Err("输出文件已存在，请选择一个新文件名".into());
-        }
         final_path.with_file_name(format!(".phirender-{}-{id}.mp4", std::process::id()))
     };
     let settings = &inner.settings;
@@ -643,7 +682,7 @@ fn start_task(
     let using_nvenc = settings.nvenc;
     let job = json!({"kind":worker_kind,"chart":chart.prepared,"output":dest,"project_root":inner.root,"skin":settings.skin,"font":settings.font,
         "width":width,"height":height,"fps":fps,"time":time.max(0.),"start":start,"end":end,"show_hud":settings.show_hud,"include_audio":settings.include_audio,
-        "hitsounds":settings.hitsounds,"hitsound_volume":settings.hitsound_volume,"nvenc":settings.nvenc,
+        "hitsounds":settings.hitsounds,"music_volume":settings.music_volume,"hitsound_volume":settings.hitsound_volume,"nvenc":settings.nvenc,
         "click_sound":sound_path(&settings.click_sound,"click"),"drag_sound":sound_path(&settings.drag_sound,"drag"),"flick_sound":sound_path(&settings.flick_sound,"flick")});
     let job_path = inner.cache.join(format!("job-{id}.json"));
     std::fs::write(&job_path, serde_json::to_vec(&job).map_err(msg)?).map_err(msg)?;
@@ -739,10 +778,7 @@ fn start_task(
                             .as_ref()
                             .ok_or("缺少输出路径".to_owned())
                             .and_then(|path| {
-                                if path.exists() {
-                                    return Err("目标文件已存在，成片保留在临时文件中".to_owned());
-                                }
-                                std::fs::rename(&dest, path).map_err(msg)?;
+                                replace_output(&dest, path)?;
                                 Ok(path.to_string_lossy().into_owned())
                             });
                     match result {

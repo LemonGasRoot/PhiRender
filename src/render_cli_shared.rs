@@ -73,8 +73,11 @@ struct RenderArgs {
     /// Do not mix note hit sounds into the video.
     #[arg(long)]
     no_hitsound: bool,
-    /// Hit sound gain multiplier (0 to 1; defaults to 0.35).
-    #[arg(long, default_value_t = 0.35)]
+    /// Music gain multiplier (defaults to 1).
+    #[arg(long, default_value_t = 1.0)]
+    music_volume: f32,
+    /// Note hit sound gain multiplier (defaults to 0.5, matching PhiVideo).
+    #[arg(long, default_value_t = 0.5)]
     hitsound_volume: f32,
     /// Export the video without the chart's music and hit sounds.
     #[arg(long)]
@@ -215,6 +218,7 @@ async fn run_inner(mode: RunMode) -> Result<()> {
         start: args.start,
         end: args.end,
         hitsound: !args.no_hitsound,
+        music_volume: args.music_volume,
         hitsound_volume: args.hitsound_volume,
         show_hud: !args.no_hud,
         show_accuracy: args.show_accuracy,

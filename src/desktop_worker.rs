@@ -42,6 +42,7 @@ struct Job {
     show_hud: bool,
     include_audio: bool,
     hitsounds: bool,
+    music_volume: f32,
     hitsound_volume: f32,
     nvenc: bool,
 }
@@ -150,8 +151,8 @@ impl Drop for SkinStage {
 
 /// Build a temporary local resource pack with selected sound files unchanged.
 fn prepare_skin(job: &Job, assets: &Path) -> Result<SkinStage> {
-    if !job.hitsound_volume.is_finite() || !(0.0..=1.0).contains(&job.hitsound_volume) {
-        return Err(anyhow!("打击音音量必须在 0 至 1 倍之间"));
+    if !job.hitsound_volume.is_finite() || !(0.0..=8.0).contains(&job.hitsound_volume) {
+        return Err(anyhow!("打击音音量必须在 0 至 8 倍之间"));
     }
     let selected = job.skin.clone().unwrap_or_else(|| assets.join("respack"));
     let phira_default = selected == assets.join("respack");
@@ -243,6 +244,9 @@ async fn main() {
 async fn run() -> Result<()> {
     let job_path = std::env::args_os().nth(1).context("缺少任务文件")?;
     let job: Job = serde_json::from_slice(&std::fs::read(job_path)?)?;
+    if !job.music_volume.is_finite() || !(0.0..=8.0).contains(&job.music_volume) {
+        return Err(anyhow!("音乐音量必须在 0 至 8 倍之间"));
+    }
     let cancelled = Arc::new(AtomicBool::new(false));
     let listener = cancelled.clone();
     std::thread::spawn(move || {
@@ -295,6 +299,7 @@ async fn run() -> Result<()> {
         show_hud: job.show_hud,
         include_audio: job.include_audio,
         hitsound: job.hitsounds,
+        music_volume: job.music_volume,
         hitsound_volume: if job.kind == "preview" {
             0.
         } else {
@@ -409,6 +414,8 @@ async fn run() -> Result<()> {
         }
         let mut child = command
             .args(["-vn", "-c:a", "aac", "-b:a", "192k"])
+            .arg("-af")
+            .arg(format!("volume={:.6}", job.music_volume))
             .arg(&job.output)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())

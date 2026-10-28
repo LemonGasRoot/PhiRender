@@ -5,5 +5,5 @@
   "identifier": "app.phirender.desktop",
   "build": { "frontendDist": "../dist", "devUrl": "http://localhost:1420" },
   "app": { "windows": [{ "title": "PhiRender", "width": 1440, "height": 900, "minWidth": 960, "minHeight": 640, "resizable": true }], "security": { "csp": null, "assetProtocol": { "enable": true, "scope": [] } } },
-  "bundle": { "active": false }
+  "bundle": { "active": false, "icon": ["icons/icon.png", "icons/icon.ico"] }
 }

@@ -18,12 +18,14 @@ wrapper around the command-line renderer.
   read back before encoding. Playback starts after generation completes.
 - Export MP4 in a background GPU worker using the existing FFmpeg software or
   NVENC encoder. Cancellation requests the worker to stop and remove its
-  temporary output. Existing destination files are not overwritten.
+  temporary output. A finished render replaces an existing file with the same
+  name; the previous video remains untouched if rendering fails.
 - Import a local Phira skin directory or ZIP and a local TTF/OTF gameplay
-  font; choose Tap/Hold, Drag and Flick sounds independently and adjust gain.
-  Sound files are prepared in a temporary resource pack before the existing
-  renderer loads them. Chart-specific sounds still use the renderer's original
-  behavior, and its existing peak normalization may compress volume changes.
+  font; choose Tap/Hold, Drag and Flick sounds independently. Music and hit
+  sounds have separate gain controls, mixed with fixed gains like PhiVideo
+  (defaults: music 1.0×, hit sounds 0.5×), without automatic compression or
+  limiting. Sound files are prepared in a temporary resource pack before the
+  existing renderer loads them.
 - Persist theme and export/skin settings. The default skin uses the existing
   local `work/Phira-Pro/assets/respack`; the project's generated skin is not
   selected as the desktop default.
