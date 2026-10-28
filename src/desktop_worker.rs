@@ -150,8 +150,8 @@ impl Drop for SkinStage {
 
 /// Build a temporary local resource pack with selected sound files unchanged.
 fn prepare_skin(job: &Job, assets: &Path) -> Result<SkinStage> {
-    if !job.hitsound_volume.is_finite() || !(0.0..=3.0).contains(&job.hitsound_volume) {
-        return Err(anyhow!("打击音音量必须在 0 至 3 倍之间"));
+    if !job.hitsound_volume.is_finite() || !(0.0..=1.0).contains(&job.hitsound_volume) {
+        return Err(anyhow!("打击音音量必须在 0 至 1 倍之间"));
     }
     let selected = job.skin.clone().unwrap_or_else(|| assets.join("respack"));
     let phira_default = selected == assets.join("respack");

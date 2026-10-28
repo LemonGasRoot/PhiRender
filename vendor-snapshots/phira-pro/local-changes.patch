@@ -507,7 +507,7 @@ index 7dd7d65..0909a8b 100644
      let out = if png_dir.is_some() { out } else { out };
      let mut renderer = match finish(ChartVideoRenderer::new(chart, opts, out.clone())).await {
 diff --git a/prpr/src/chart_video.rs b/prpr/src/chart_video.rs
-index 5c6a491..d380c37 100644
+index 5c6a491..a2f011e 100644
 --- a/prpr/src/chart_video.rs
 +++ b/prpr/src/chart_video.rs
 @@ -1,8 +1,8 @@
@@ -543,7 +543,7 @@ index 5c6a491..d380c37 100644
      /// 是否混入打击音（音乐始终会混入）。
      pub hitsound: bool,
 -    /// 是否画分数/连击/暂停按钮等 HUD（默认不画，只留谱面）。
-+    /// Linear hitsound gain before mixing with music. Soft-limited to prevent clipping.
++    /// Linear hitsound gain before per-stem peak protection.
 +    pub hitsound_volume: f32,
 +    /// 是否画分数/连击/曲名与难度等 HUD（默认显示）。
      pub show_hud: bool,
@@ -575,7 +575,7 @@ index 5c6a491..d380c37 100644
              end: None,
              hitsound: true,
 -            show_hud: false,
-+            hitsound_volume: 1.0,
++            hitsound_volume: 0.35,
 +            show_hud: true,
 +            show_accuracy: false,
 +            show_offset_indicator: false,
@@ -590,8 +590,8 @@ index 5c6a491..d380c37 100644
          if !self.start.is_finite() || self.start < 0. {
              bail!("起始时间无效");
          }
-+        if !self.hitsound_volume.is_finite() || !(0.0..=3.0).contains(&self.hitsound_volume) {
-+            bail!("打击音音量必须在 0 至 3 倍之间");
++        if !self.hitsound_volume.is_finite() || !(0.0..=1.0).contains(&self.hitsound_volume) {
++            bail!("打击音音量必须在 0 至 1 倍之间");
 +        }
          Ok(())
      }
@@ -643,7 +643,7 @@ index 5c6a491..d380c37 100644
              (true, true) => {
                  cmd.arg("-filter_complex")
 -                    .arg("[1:a]apad[m];[m][2:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]")
-+                    .arg("[1:a]apad[m];[m][2:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95:level=false[a]")
++                    .arg("[1:a]volume=0.80,alimiter=limit=0.80:level=false,apad[m];[2:a]alimiter=limit=0.18:level=false[h];[m][h]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]")
                      .arg("-map")
                      .arg("0:v")
                      .arg("-map")
@@ -657,7 +657,7 @@ index 5c6a491..d380c37 100644
 +                    .arg("-b:a")
 +                    .arg("192k")
 +                    .arg("-af")
-+                    .arg("alimiter=limit=0.95:level=false");
++                    .arg("alimiter=limit=0.18:level=false");
              }
              (false, false) => {}
          }
@@ -987,8 +987,8 @@ index 5c6a491..d380c37 100644
 -        for frame in &mut mix {
 -            *frame = *frame * gain;
 -        }
-+    // 保持线性增益，不在这里削波；歌曲与打击音合并后只由编码器侧限幅一次。
-+    let gain = volume.clamp(0., 3.);
++    // 保持线性增益；混音时对歌曲和打击音分别控峰，避免打击音牵动歌曲音量。
++    let gain = volume.clamp(0., 1.);
 +    for frame in &mut mix {
 +        frame.0 *= gain;
 +        frame.1 *= gain;

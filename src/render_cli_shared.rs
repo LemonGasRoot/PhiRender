@@ -73,8 +73,8 @@ struct RenderArgs {
     /// Do not mix note hit sounds into the video.
     #[arg(long)]
     no_hitsound: bool,
-    /// Hit sound gain multiplier (0 to 8; defaults to 1).
-    #[arg(long, default_value_t = 1.0)]
+    /// Hit sound gain multiplier (0 to 1; defaults to 0.35).
+    #[arg(long, default_value_t = 0.35)]
     hitsound_volume: f32,
     /// Export the video without the chart's music and hit sounds.
     #[arg(long)]
