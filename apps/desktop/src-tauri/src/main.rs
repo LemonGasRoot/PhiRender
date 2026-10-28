@@ -37,6 +37,7 @@ struct Settings {
     fps: u32,
     nvenc: bool,
     auto_preview: bool,
+    preview_resolution: u32,
     settings_version: u32,
 }
 impl Default for Settings {
@@ -57,6 +58,7 @@ impl Default for Settings {
             fps: 60,
             nvenc: true,
             auto_preview: true,
+            preview_resolution: 480,
             settings_version: 0,
         }
     }
@@ -165,6 +167,10 @@ fn initial_state() -> Inner {
     if settings.settings_version < 4 {
         settings.hitsound_volume = settings.hitsound_volume.min(1.0);
         settings.settings_version = 4;
+    }
+    if settings.settings_version < 5 {
+        settings.preview_resolution = 480;
+        settings.settings_version = 5;
     }
     if settings.skin.is_none() {
         let phira = root.join("work/Phira-Pro/assets/respack");
@@ -341,6 +347,7 @@ fn save_settings(state: State<'_, AppState>, settings: Settings) -> Result<(), S
         || !settings.hitsound_volume.is_finite()
         || !(0.0..=3.0).contains(&settings.hitsound_volume)
         || ![30, 60, 120].contains(&settings.fps)
+        || ![480, 720, 1080].contains(&settings.preview_resolution)
         || ![(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)]
             .contains(&(settings.width, settings.height))
     {
@@ -559,6 +566,7 @@ fn start_task(
     kind: &str,
     time: f64,
     output: Option<PathBuf>,
+    range: Option<(f64, Option<f64>)>,
 ) -> Result<(), String> {
     let mut inner = shared.lock().unwrap();
     let background = kind == "preview_video";
@@ -582,6 +590,10 @@ fn start_task(
         inner
             .cache
             .join(format!("preview-{}-{id}.mp4", std::process::id()))
+    } else if kind == "audio_export" {
+        inner
+            .cache
+            .join(format!("audio-{}-{id}.m4a", std::process::id()))
     } else {
         let final_path = output.as_ref().ok_or("没有选择输出文件")?;
         if final_path.exists() {
@@ -591,7 +603,13 @@ fn start_task(
     };
     let settings = &inner.settings;
     let (width, height, fps) = if kind == "preview" || kind == "preview_video" {
-        (1280, 720, 30)
+        let h = settings.preview_resolution;
+        let w = match h {
+            480 => 854,
+            720 => 1280,
+            _ => 1920,
+        };
+        (w, h, 30)
     } else {
         (settings.width, settings.height, settings.fps)
     };
@@ -617,9 +635,10 @@ fn start_task(
     } else {
         kind
     };
+    let (start, end) = range.unwrap_or((0., None));
     let using_nvenc = settings.nvenc;
     let job = json!({"kind":worker_kind,"chart":chart.prepared,"output":dest,"project_root":inner.root,"skin":settings.skin,"font":settings.font,
-        "width":width,"height":height,"fps":fps,"time":time.max(0.),"show_hud":settings.show_hud,"include_audio":settings.include_audio,
+        "width":width,"height":height,"fps":fps,"time":time.max(0.),"start":start,"end":end,"show_hud":settings.show_hud,"include_audio":settings.include_audio,
         "hitsounds":settings.hitsounds,"hitsound_volume":settings.hitsound_volume,"nvenc":settings.nvenc,
         "click_sound":sound_path(&settings.click_sound,"click"),"drag_sound":sound_path(&settings.drag_sound,"drag"),"flick_sound":sound_path(&settings.flick_sound,"flick")});
     let job_path = inner.cache.join(format!("job-{id}.json"));
@@ -651,7 +670,11 @@ fn start_task(
     let task = TaskView {
         kind: kind.into(),
         status: "loading".into(),
-        message: "正在加载渲染场景…".into(),
+        message: if kind == "audio_export" {
+            "正在导出歌曲音频…".into()
+        } else {
+            "正在加载渲染场景…".into()
+        },
         ..Default::default()
     };
     if background {
@@ -786,11 +809,11 @@ fn start_preview(state: State<'_, AppState>, time: f64) -> Result<(), String> {
     if !time.is_finite() {
         return Err("时间无效".into());
     }
-    start_task(state.0.clone(), "preview", time, None)
+    start_task(state.0.clone(), "preview", time, None, None)
 }
 #[tauri::command]
 fn start_preview_video(state: State<'_, AppState>) -> Result<(), String> {
-    start_task(state.0.clone(), "preview_video", 0., None)
+    start_task(state.0.clone(), "preview_video", 0., None, None)
 }
 
 fn output_filename(title: &str, level: &str) -> String {
@@ -853,22 +876,50 @@ mod tests {
     }
 }
 #[tauri::command]
-async fn start_export(state: State<'_, AppState>) -> Result<(), String> {
+async fn start_export(
+    state: State<'_, AppState>,
+    mode: String,
+    start: f64,
+    end: Option<f64>,
+) -> Result<(), String> {
+    if !start.is_finite() || start < 0. || end.is_some_and(|v| !v.is_finite() || v <= start) {
+        return Err("片段起止时间无效，结束时间必须大于开始时间".into());
+    }
+    if !["video", "audio"].contains(&mode.as_str()) {
+        return Err("不支持的导出类型".into());
+    }
     let shared = state.0.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let filename = {
+        let (filename, kind, filter, extensions) = {
             let inner = shared.lock().unwrap();
             let chart = inner.chart.as_ref().ok_or("请先打开谱面")?;
-            output_filename(&chart.view.title, &chart.view.level)
+            if !chart.view.music {
+                return Err("谱面没有关联音乐".into());
+            }
+            if mode == "audio" {
+                (
+                    output_filename(&chart.view.title, &chart.view.level).replace(".mp4", ".m4a"),
+                    "audio_export",
+                    "音频文件",
+                    vec!["m4a"],
+                )
+            } else {
+                (
+                    output_filename(&chart.view.title, &chart.view.level),
+                    "export",
+                    "MP4 视频",
+                    vec!["mp4"],
+                )
+            }
         };
         let Some(path) = rfd::FileDialog::new()
-            .add_filter("MP4 视频", &["mp4"])
+            .add_filter(filter, &extensions)
             .set_file_name(filename)
             .save_file()
         else {
             return Ok(());
         };
-        start_task(shared, "export", 0., Some(path))
+        start_task(shared, kind, 0., Some(path), Some((start, end)))
     })
     .await
     .map_err(msg)?

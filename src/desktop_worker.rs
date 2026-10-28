@@ -342,6 +342,98 @@ async fn run() -> Result<()> {
         event(
             json!({"type":"preview", "path":job.output, "title":renderer.title(), "level":renderer.level(), "duration":renderer.track_length(), "time":job.time}),
         );
+    } else if job.kind == "audio_export" {
+        let file = std::fs::File::open(&job.chart)?;
+        let mut archive = zip::ZipArchive::new(file)?;
+        let info_name = archive
+            .file_names()
+            .find(|n| {
+                n.rsplit('/')
+                    .next()
+                    .is_some_and(|b| b.eq_ignore_ascii_case("info.txt"))
+            })
+            .map(str::to_owned)
+            .context("谱面归档缺少 info.txt")?;
+        let mut info = String::new();
+        archive.by_name(&info_name)?.read_to_string(&mut info)?;
+        let song = info
+            .lines()
+            .find_map(|line| {
+                let (key, value) = line.split_once(':')?;
+                key.trim()
+                    .eq_ignore_ascii_case("song")
+                    .then(|| value.trim().to_owned())
+            })
+            .filter(|s| !s.is_empty())
+            .context("谱面信息中没有歌曲音频路径")?;
+        let song = song.replace('\\', "/");
+        let song_lower = song.to_ascii_lowercase();
+        let song_entry = archive
+            .file_names()
+            .find(|name| {
+                let lower = name.to_ascii_lowercase();
+                lower == song_lower || lower.ends_with(&format!("/{song_lower}"))
+            })
+            .map(str::to_owned)
+            .with_context(|| format!("找不到歌曲音频：{song}"))?;
+        let mut entry = archive
+            .by_name(&song_entry)
+            .with_context(|| format!("找不到歌曲音频：{song}"))?;
+        let ext = Path::new(&song)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("audio");
+        let source =
+            std::env::temp_dir().join(format!("phirender-audio-{}-{ext}", std::process::id()));
+        std::fs::write(&source, {
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes)?;
+            bytes
+        })?;
+        let duration = job.end.map(|end| (end - job.start).max(0.));
+        let ffmpeg = std::env::var_os("PHIRA_FFMPEG")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("ffmpeg"));
+        let mut command = std::process::Command::new(ffmpeg);
+        command
+            .arg("-hide_banner")
+            .arg("-loglevel")
+            .arg("error")
+            .arg("-y");
+        if job.start > 0. {
+            command.arg("-ss").arg(format!("{:.6}", job.start));
+        }
+        command.arg("-i").arg(&source);
+        if let Some(duration) = duration {
+            command.arg("-t").arg(format!("{duration:.6}"));
+        }
+        let mut child = command
+            .args(["-vn", "-c:a", "aac", "-b:a", "192k"])
+            .arg(&job.output)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .context("无法启动 FFmpeg 音频导出")?;
+        let status = loop {
+            if cancelled.load(Ordering::Relaxed) {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = std::fs::remove_file(&source);
+                let _ = std::fs::remove_file(&job.output);
+                event(json!({"type":"cancelled"}));
+                return Ok(());
+            }
+            if let Some(status) = child.try_wait()? {
+                break status;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        };
+        let _ = std::fs::remove_file(source);
+        if !status.success() {
+            return Err(anyhow!("FFmpeg 音频导出失败：{status}"));
+        }
+        event(json!({"type":"complete", "path":job.output}));
     } else if job.kind == "export" {
         let mut load = Box::pin(ChartVideoRenderer::new(job.chart, opts, job.output.clone()));
         let mut renderer = loop {
