@@ -50,9 +50,10 @@ cargo build --release --bin phirender-gpu-worker
 cargo build --release --features custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml
 ```
 
-Put `phirender-desktop.exe` and `phirender-gpu-worker.exe` together. Put the
-optional `saira-regular.ttf` and its OFL notice next to them for the default
-gameplay font. The GNU Windows build also needs the matching x64
+Put `phirender-desktop.exe` and `phirender-gpu-worker.exe` together. Saira
+Regular is embedded in the desktop executable and extracted into the app cache
+for the default gameplay font; include its SIL OFL notice with the release.
+The GNU Windows build also needs the matching x64
 `WebView2Loader.dll` beside the desktop executable and an installed WebView2
 Runtime. On this development machine the program finds the existing
 `work/Phira-Pro/assets` and FFmpeg in the project tree. It is therefore a

@@ -16,11 +16,12 @@ the updated snapshot. Git in the parent repository cannot automatically
 restore files inside the separate checkout; the snapshot is restored using the
 fresh-checkout procedure below.
 
-For a fresh development checkout, clone the upstream repository at that exact
-commit into `work/Phira-Pro`, run `git apply --check` on the patch, then apply
-it and copy the contents of `untracked/` into the corresponding locations.
-Do not apply the patch to an existing checkout without first checking its
-state: doing so can overwrite or conflict with local work.
+For a fresh development checkout, run `powershell -ExecutionPolicy Bypass
+-File .\\tools\\restore-phira.ps1` from the project root. The script clones the
+upstream repository at that exact commit, validates and applies the patch, and
+copies the contents of `untracked/`. It refuses to overwrite an existing
+`work/Phira-Pro` checkout. The matching GPL-3.0 license text is included here
+as `LICENSE-GPL-3.0.txt`.
 
 This snapshot is for restoring the existing source state; it does not grant
 additional rights to redistribute third-party assets. The local upstream

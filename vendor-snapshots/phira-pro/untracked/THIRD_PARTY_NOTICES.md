@@ -18,4 +18,4 @@ The upstream checkout also contains `assets/font.ttf`, `assets/harmonyos.ttf`, `
 
 ## Saira Regular default gameplay font
 
-The application can load `saira-regular.ttf` beside the executable and uses it as the primary gameplay HUD font, with the existing runtime font as fallback for glyphs Saira does not include. The supplied Saira family is authored by Héctor Gatti and the Omnibus-Type team and is licensed under the SIL Open Font License 1.1. The font and `OFL.txt` are distributed together in the GUI delivery folder. Source: https://github.com/Omnibus-Type/Saira.
+The desktop executable embeds `saira-regular.ttf` and extracts it into the application cache at startup. It uses Saira as the primary gameplay HUD font, with the existing runtime font as fallback for glyphs Saira does not include. The supplied Saira family is authored by Héctor Gatti and the Omnibus-Type team and is licensed under the SIL Open Font License 1.1. Include `resources/Saira-OFL.txt` with every release. Source: https://github.com/Omnibus-Type/Saira.

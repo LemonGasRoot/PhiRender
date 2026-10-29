@@ -2,7 +2,7 @@
 name = "phigros-rpen-converter"
 version = "0.1.0"
 edition = "2021"
-description = "Convert official Phigros v3 charts to RPEN-compatible JSON and PEZ"
+description = "PhiRender: Phigros chart conversion and GPU rendering toolkit"
 license = "PolyForm-Noncommercial-1.0.0"
 
 [features]

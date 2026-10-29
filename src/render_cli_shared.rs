@@ -225,6 +225,8 @@ async fn run_inner(mode: RunMode) -> Result<()> {
         show_offset_indicator: false,
         include_audio: !args.no_audio,
         sample_count: args.samples,
+        chart_delay_ms: 0.0,
+        config_overrides: None,
         encoder: match args.encoder {
             CliEncoder::Software => VideoEncoder::H264Software,
             CliEncoder::Nvenc => VideoEncoder::H264Nvenc,

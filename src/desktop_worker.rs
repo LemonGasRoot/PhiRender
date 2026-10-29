@@ -4,6 +4,7 @@ use anyhow::{anyhow, Context, Result};
 use macroquad::{file::set_pc_assets_folder, prelude::*};
 use prpr::{
     chart_video::{ChartVideoRenderer, VideoEncoder, VideoOptions},
+    config::Config,
     core::{BOLD_FONT, HUD_INFO_FONT, PGR_FONT},
     ext::poll_future,
     ui::{FontArc, TextPainter},
@@ -45,6 +46,16 @@ struct Job {
     music_volume: f32,
     hitsound_volume: f32,
     nvenc: bool,
+    #[serde(default = "default_sample_count")]
+    sample_count: u32,
+    #[serde(default)]
+    chart_delay_ms: f64,
+    #[serde(default)]
+    experimental_config: serde_json::Value,
+}
+
+fn default_sample_count() -> u32 {
+    1
 }
 
 fn conf() -> Conf {
@@ -290,6 +301,21 @@ async fn run() -> Result<()> {
         }
     }
     let skin_stage = prepare_skin(&job, &assets)?;
+    let defaults = serde_json::to_value(Config::default())?;
+    let default_keys = defaults
+        .as_object()
+        .context("无法读取 Phira Pro 参数模板")?;
+    let requested = job
+        .experimental_config
+        .as_object()
+        .context("实验性参数必须是 JSON 对象")?;
+    for key in requested.keys() {
+        if !default_keys.contains_key(key) {
+            return Err(anyhow!("未知的 Phira Pro 参数：{key}"));
+        }
+    }
+    let config_overrides: Config = serde_json::from_value(job.experimental_config.clone())
+        .context("实验性 Phira Pro 参数无效，请恢复默认或修正 JSON")?;
     let opts = VideoOptions {
         width: job.width,
         height: job.height,
@@ -300,12 +326,10 @@ async fn run() -> Result<()> {
         include_audio: job.include_audio,
         hitsound: job.hitsounds,
         music_volume: job.music_volume,
-        hitsound_volume: if job.kind == "preview" {
-            0.
-        } else {
-            job.hitsound_volume
-        },
-        sample_count: 1,
+        hitsound_volume: job.hitsound_volume,
+        sample_count: job.sample_count.clamp(1, 8),
+        chart_delay_ms: job.chart_delay_ms,
+        config_overrides: Some(config_overrides),
         res_pack_path: Some(skin_stage.dir.clone()),
         encoder: if job.nvenc {
             VideoEncoder::H264Nvenc

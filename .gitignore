@@ -12,3 +12,12 @@
 
 *.tmp
 *.log
+
+# Credentials and local secrets must never enter the source repository.
+*.imakey
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example

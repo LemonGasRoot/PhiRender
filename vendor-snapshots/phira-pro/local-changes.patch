@@ -507,7 +507,7 @@ index 7dd7d65..0909a8b 100644
      let out = if png_dir.is_some() { out } else { out };
      let mut renderer = match finish(ChartVideoRenderer::new(chart, opts, out.clone())).await {
 diff --git a/prpr/src/chart_video.rs b/prpr/src/chart_video.rs
-index 5c6a491..e5c1d54 100644
+index 5c6a491..1b1e746 100644
 --- a/prpr/src/chart_video.rs
 +++ b/prpr/src/chart_video.rs
 @@ -1,8 +1,8 @@
@@ -538,7 +538,16 @@ index 5c6a491..e5c1d54 100644
      ext::SafeTexture,
      fs::{fs_from_file, load_info},
      scene::{GameMode, GameScene, LoadingScene, Scene},
-@@ -37,10 +37,32 @@ pub struct VideoOptions {
+@@ -26,7 +26,7 @@ use crate::{
+ };
+ 
+ /// 渲染参数。
+-#[derive(Clone, Debug)]
++#[derive(Clone)]
+ pub struct VideoOptions {
+     pub width: u32,
+     pub height: u32,
+@@ -37,10 +37,36 @@ pub struct VideoOptions {
      pub end: Option<f64>,
      /// 是否混入打击音（音乐始终会混入）。
      pub hitsound: bool,
@@ -557,6 +566,10 @@ index 5c6a491..e5c1d54 100644
 +    pub include_audio: bool,
      /// MSAA 采样数。
      pub sample_count: u32,
++    /// Additional chart-to-music delay in milliseconds; positive values move notes later.
++    pub chart_delay_ms: f64,
++    /// Phira Pro render/gameplay parameters. Export-only controls take precedence.
++    pub config_overrides: Option<Config>,
 +    /// 视频编码器。NVENC 仍接收 CPU 侧 RGBA 帧；它只替换编码阶段。
 +    pub encoder: VideoEncoder,
 +    /// 可选 Phira Pro 资源包目录或 ZIP。缺省时使用程序默认资源包。
@@ -572,7 +585,7 @@ index 5c6a491..e5c1d54 100644
  }
  
  impl Default for VideoOptions {
-@@ -52,8 +74,15 @@ impl Default for VideoOptions {
+@@ -52,8 +78,17 @@ impl Default for VideoOptions {
              start: 0.,
              end: None,
              hitsound: true,
@@ -584,12 +597,14 @@ index 5c6a491..e5c1d54 100644
 +            show_offset_indicator: false,
 +            include_audio: true,
              sample_count: 4,
++            chart_delay_ms: 0.,
++            config_overrides: None,
 +            encoder: VideoEncoder::H264Software,
 +            res_pack_path: None,
          }
      }
  }
-@@ -69,6 +98,12 @@ impl VideoOptions {
+@@ -69,6 +104,15 @@ impl VideoOptions {
          if !self.start.is_finite() || self.start < 0. {
              bail!("起始时间无效");
          }
@@ -599,10 +614,13 @@ index 5c6a491..e5c1d54 100644
 +        if !self.hitsound_volume.is_finite() || !(0.0..=8.0).contains(&self.hitsound_volume) {
 +            bail!("打击音音量必须在 0 至 8 倍之间");
 +        }
++        if !self.chart_delay_ms.is_finite() || !(-10_000.0..=10_000.0).contains(&self.chart_delay_ms) {
++            bail!("谱面延迟校正必须在 -10000 至 10000 毫秒之间");
++        }
          Ok(())
      }
  
-@@ -205,13 +240,51 @@ impl Encoder {
+@@ -205,13 +249,51 @@ impl Encoder {
              cmd.arg("-f").arg("wav").arg("-i").arg(hitsound);
          }
          cmd.arg("-vf").arg("vflip");
@@ -657,7 +675,7 @@ index 5c6a491..e5c1d54 100644
                      .arg("-map")
                      .arg("0:v")
                      .arg("-map")
-@@ -219,10 +292,20 @@ impl Encoder {
+@@ -219,10 +301,20 @@ impl Encoder {
                  cmd.arg("-c:a").arg("aac").arg("-b:a").arg("192k");
              }
              (true, false) => {
@@ -680,7 +698,7 @@ index 5c6a491..e5c1d54 100644
              }
              (false, false) => {}
          }
-@@ -269,16 +352,32 @@ pub struct ChartVideoRenderer {
+@@ -269,16 +361,32 @@ pub struct ChartVideoRenderer {
      hitsound_temp: Option<PathBuf>,
      buf: Vec<u8>,
      title: String,
@@ -713,7 +731,7 @@ index 5c6a491..e5c1d54 100644
          // 没有曲绘时用一个纯色贴图兜底，谱面本身仍然可以渲染。
          let (illustration, background) = match LoadingScene::load(fs.as_mut(), &info.illustration).await {
              Ok((illustration, background, _)) => (illustration, background),
-@@ -289,7 +388,7 @@ impl ChartVideoRenderer {
+@@ -289,7 +397,7 @@ impl ChartVideoRenderer {
              }
          };
  
@@ -722,18 +740,22 @@ index 5c6a491..e5c1d54 100644
              match fs.load_file(&info.music).await {
                  Ok(bytes) => {
                      let ext = Path::new(&info.music)
-@@ -317,8 +416,8 @@ impl ChartVideoRenderer {
+@@ -315,10 +423,10 @@ impl ChartVideoRenderer {
+             None
+         };
  
-         let mut config = Config::default();
-         config.mods = Mods::AUTOPLAY;
+-        let mut config = Config::default();
+-        config.mods = Mods::AUTOPLAY;
 -        config.volume_music = 0.;
 -        config.volume_sfx = 0.;
++        let mut config = opts.config_overrides.clone().unwrap_or_default();
++        config.mods |= Mods::AUTOPLAY;
 +        config.volume_music = if preview_only { 1. } else { 0. };
 +        config.volume_sfx = if preview_only { 1. } else { 0. };
          config.sample_count = opts.sample_count.clamp(1, 8);
          config.show_avg_fps = false;
          config.show_fps = false;
-@@ -326,6 +425,9 @@ impl ChartVideoRenderer {
+@@ -326,6 +434,9 @@ impl ChartVideoRenderer {
          config.speed = 1.;
          config.adjust_time = false;
          config.interactive = false;
@@ -743,7 +765,16 @@ index 5c6a491..e5c1d54 100644
  
          let mut scene = GameScene::new(GameMode::View, info, config, fs, None, background, illustration, None, None, None)
              .await
-@@ -346,8 +448,8 @@ impl ChartVideoRenderer {
+@@ -335,7 +446,7 @@ impl ChartVideoRenderer {
+         capture.texture.set_filter(FilterMode::Linear);
+         scene.res.camera.render_target = Some(capture);
+ 
+-        let offset = scene.offset() as f64;
++        let offset = scene.offset() as f64 + opts.chart_delay_ms / 1000.0;
+         let track_length = scene.res.track_length;
+         let start = opts.start.clamp(0., track_length);
+         let end = opts.end.unwrap_or(track_length).clamp(start, track_length);
+@@ -346,8 +457,8 @@ impl ChartVideoRenderer {
          }
          // 打击音的时间点只和谱面有关，渲染前先混成一条音轨，
          // 再由 ffmpeg 跟音乐一起 amix。
@@ -754,7 +785,7 @@ index 5c6a491..e5c1d54 100644
                  Ok(path) => Some(path),
                  Err(err) => {
                      tracing::warn!("打击音混音失败，本次不带打击音：{err:?}");
-@@ -358,10 +460,14 @@ impl ChartVideoRenderer {
+@@ -358,10 +469,14 @@ impl ChartVideoRenderer {
              None
          };
          let title = scene.res.info.name.clone();
@@ -773,7 +804,7 @@ index 5c6a491..e5c1d54 100644
          let buf = vec![0; opts.width as usize * opts.height as usize * 4];
  
          Ok(Self {
-@@ -375,12 +481,16 @@ impl ChartVideoRenderer {
+@@ -375,12 +490,16 @@ impl ChartVideoRenderer {
              duration,
              total_frames,
              frame: 0,
@@ -792,7 +823,7 @@ index 5c6a491..e5c1d54 100644
          })
      }
  
-@@ -396,6 +506,69 @@ impl ChartVideoRenderer {
+@@ -396,6 +515,69 @@ impl ChartVideoRenderer {
          self.duration
      }
  
@@ -862,7 +893,7 @@ index 5c6a491..e5c1d54 100644
      pub fn options(&self) -> &VideoOptions {
          &self.opts
      }
-@@ -416,10 +589,30 @@ impl ChartVideoRenderer {
+@@ -416,10 +598,30 @@ impl ChartVideoRenderer {
  
      /// 渲染下一帧（不调用 `next_frame`，可在同一渲染帧内连续调用）。
      pub fn render_next_frame(&mut self, painter: &mut TextPainter) -> Result<()> {
@@ -893,7 +924,7 @@ index 5c6a491..e5c1d54 100644
          let time = music_time - self.offset;
          self.scene.res.time = time;
          self.scene.res.alpha = 1.;
-@@ -432,11 +625,14 @@ impl ChartVideoRenderer {
+@@ -432,11 +634,14 @@ impl ChartVideoRenderer {
              self.scene.render(&mut self.tm, &mut ui).context("渲染谱面失败")?;
          }
          unsafe { get_internal_gl() }.flush();
@@ -912,7 +943,7 @@ index 5c6a491..e5c1d54 100644
          Ok(())
      }
  
-@@ -497,56 +693,37 @@ impl Drop for ChartVideoRenderer {
+@@ -497,56 +702,37 @@ impl Drop for ChartVideoRenderer {
  /// 打击音的混音采样率。
  const HITSOUND_RATE: u32 = 44100;
  
@@ -978,7 +1009,7 @@ index 5c6a491..e5c1d54 100644
      let mut mix = vec![Frame::default(); total];
      for line in &chart.lines {
          for note in &line.notes {
-@@ -559,11 +736,11 @@ async fn write_hitsound(chart: &Chart, offset: f64, start: f64, duration: f64) -
+@@ -559,11 +745,11 @@ async fn write_hitsound(chart: &Chart, offset: f64, start: f64, duration: f64) -
              }
              let clip = match &note.hitsound {
                  HitSound::None => continue,
@@ -995,7 +1026,7 @@ index 5c6a491..e5c1d54 100644
              };
              let begin = (at * HITSOUND_RATE as f64).round() as usize;
              let len = (clip.length() * HITSOUND_RATE as f64).ceil() as usize;
-@@ -577,14 +754,6 @@ async fn write_hitsound(chart: &Chart, offset: f64, start: f64, duration: f64) -
+@@ -577,14 +763,6 @@ async fn write_hitsound(chart: &Chart, offset: f64, start: f64, duration: f64) -
              }
          }
      }
@@ -1581,7 +1612,7 @@ index e4c6e22..7d4eb51 100644
                      if self.pitch != p {
                          self.primed = false;
 diff --git a/prpr/src/scene/game.rs b/prpr/src/scene/game.rs
-index 4e87bc5..ce3a374 100644
+index 4e87bc5..27e372a 100644
 --- a/prpr/src/scene/game.rs
 +++ b/prpr/src/scene/game.rs
 @@ -27,7 +27,9 @@ use crate::practice::{
@@ -1595,18 +1626,31 @@ index 4e87bc5..ce3a374 100644
      ext::{parse_time, screen_aspect, semi_white, spawn_task, RectExt, SafeTexture, ScaleType},
      fs::FileSystem,
      info::{ChartFormat, ChartInfo},
-@@ -1351,28 +1353,42 @@ impl GameScene {
+@@ -1350,29 +1352,52 @@ impl GameScene {
+             }
              // magic to make score visible, refer to phira/src/rate.rs#L219
              ui.text("").draw_using(&PGR_FONT);
-             let lf = -1. + margin;
-+            let info_left = lf + 0.04;
-+            let info_right = -lf - 0.04;
-             let bt = -top - eps * 2.8 + (1. - p) * 0.4;
-+            let info_text_size = 0.62;
+-            let lf = -1. + margin;
+-            let bt = -top - eps * 2.8 + (1. - p) * 0.4;
++            // Match PhiVideo's chart-info geometry: 45/44 px side margins at 1920 px
++            // and a 39 px title, with the baseline calibrated against a same-frame render.
++            let info_left = -1. + 2. * 45. / 1920.;
++            let info_right = 1. - 2. * 44. / 1920.;
++            // Phira's normalized UI coordinates place the baseline differently from
++            // PhiVideo's pixel coordinates; 1042/1080 aligns the rendered text pixels.
++            let bt = top + (1042. / 1080.) * (-2. * top) + (1. - p) * 0.4;
++            let base_info_size = 39. / (0.04 * 1920.);
 +            let info_font = if HUD_INFO_FONT.with(|font| font.borrow().is_some()) {
 +                &HUD_INFO_FONT
 +            } else {
 +                &PGR_FONT
++            };
++            let title_width = ui.text(&res.info.name).size(base_info_size).measure_using(info_font).w;
++            // PhiVideo scales both bottom labels together when the song name is too wide.
++            let info_text_size = if title_width > 1. {
++                base_info_size / title_width
++            } else {
++                base_info_size
 +            };
              let scale_point = legacy_aui.then(|| {
 -                let ct = ui.text(&res.info.name).size(0.5).measure().center();
@@ -1623,7 +1667,7 @@ index 4e87bc5..ce3a374 100644
 -                    .size(0.5)
 +                    .size(info_text_size)
                      .color(c)
-                     .max_width(0.8)
+-                    .max_width(0.8)
 -                    .draw();
 +                    .draw_using(info_font);
              });

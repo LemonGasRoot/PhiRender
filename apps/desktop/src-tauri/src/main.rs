@@ -18,6 +18,7 @@ use std::{
 use tauri::{Manager, State};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+const BUILTIN_GAME_FONT: &[u8] = include_bytes!("../resources/saira-regular.ttf");
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -39,6 +40,9 @@ struct Settings {
     nvenc: bool,
     auto_preview: bool,
     preview_resolution: u32,
+    sample_count: u32,
+    chart_delay_ms: f64,
+    experimental_config: Value,
     settings_version: u32,
 }
 impl Default for Settings {
@@ -61,7 +65,10 @@ impl Default for Settings {
             nvenc: true,
             auto_preview: true,
             preview_resolution: 480,
-            settings_version: 0,
+            sample_count: 1,
+            chart_delay_ms: 0.0,
+            experimental_config: json!({}),
+            settings_version: 9,
         }
     }
 }
@@ -71,6 +78,9 @@ struct ChartView {
     source: String,
     title: String,
     level: String,
+    composer: String,
+    charter: String,
+    illustrator: String,
     format: String,
     notes: usize,
     lines: usize,
@@ -216,20 +226,32 @@ fn initial_state() -> Inner {
         settings.hitsound_volume = 0.5;
         settings.settings_version = 7;
     }
+    if settings.settings_version < 8 {
+        settings.sample_count = 1;
+        settings.experimental_config = json!({});
+        settings.settings_version = 8;
+    }
+    if settings.settings_version < 9 {
+        settings.chart_delay_ms = 0.0;
+        settings.settings_version = 9;
+    }
     if settings.skin.is_none() {
         let phira = root.join("work/Phira-Pro/assets/respack");
         if phira.is_dir() {
             settings.skin = Some(phira.to_string_lossy().into_owned());
         }
     }
-    if settings.font.is_none() {
-        if let Some(font) = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.join("saira-regular.ttf")))
-            .filter(|p| p.is_file())
-        {
-            settings.font = Some(font.to_string_lossy().into_owned());
-        }
+    let builtin_font = cache.join("saira-regular.ttf");
+    if !builtin_font.is_file() {
+        let _ = std::fs::write(&builtin_font, BUILTIN_GAME_FONT);
+    }
+    if !settings
+        .font
+        .as_deref()
+        .is_some_and(|font| Path::new(font).is_file())
+        && builtin_font.is_file()
+    {
+        settings.font = Some(builtin_font.to_string_lossy().into_owned());
     }
     let inner = Inner {
         root,
@@ -291,14 +313,28 @@ fn prepare_chart(source: &Path, cache: &Path, music: Option<&Path>) -> Result<Ch
         .unwrap_or_default()
         .to_string_lossy()
         .into_owned();
-    let (packed, format, notes, lines, noise, warnings, title, level, has_music) = if is_archive(
-        source,
-    ) {
+    let (
+        packed,
+        format,
+        notes,
+        lines,
+        noise,
+        warnings,
+        title,
+        level,
+        composer,
+        charter,
+        illustrator,
+        has_music,
+    ) = if is_archive(source) {
         let (packed, report) =
             archive::convert_archive_with_mode(&bytes, OutputMode::Standard).map_err(msg)?;
         let files = archive::read_zip(&packed).map_err(msg)?;
         let title = info_value(&files, "Name").unwrap_or_else(|| fallback_title.clone());
         let level = info_value(&files, "Level").unwrap_or_default();
+        let composer = info_value(&files, "Composer").unwrap_or_default();
+        let charter = info_value(&files, "Charter").unwrap_or_default();
+        let illustrator = info_value(&files, "Illustrator").unwrap_or_default();
         let music = info_value(&files, "Song")
             .or_else(|| info_value(&files, "music"))
             .is_some();
@@ -311,6 +347,9 @@ fn prepare_chart(source: &Path, cache: &Path, music: Option<&Path>) -> Result<Ch
             report.warnings,
             title,
             level,
+            composer,
+            charter,
+            illustrator,
             music,
         )
     } else {
@@ -325,6 +364,9 @@ fn prepare_chart(source: &Path, cache: &Path, music: Option<&Path>) -> Result<Ch
             .unwrap_or(&fallback_title)
             .to_owned();
         let level = doc["META"]["level"].as_str().unwrap_or("").to_owned();
+        let composer = doc["META"]["composer"].as_str().unwrap_or("").to_owned();
+        let charter = doc["META"]["charter"].as_str().unwrap_or("").to_owned();
+        let illustrator = doc["META"]["illustrator"].as_str().unwrap_or("").to_owned();
         let notes = count_notes(&doc);
         let lines = doc["judgeLineList"].as_array().map_or(0, Vec::len);
         let noise = doc["blockAreaList"].as_array().map_or(0, Vec::len);
@@ -349,7 +391,7 @@ fn prepare_chart(source: &Path, cache: &Path, music: Option<&Path>) -> Result<Ch
         } else {
             String::new()
         };
-        let info = format!("#\nName: {title}\nPath: 00000000\nSong: {music_name}\nPicture: \nChart: chart.json\nLevel: {level}\nComposer: \nCharter: \nIllustrator: \n");
+        let info = format!("#\nName: {title}\nPath: 00000000\nSong: {music_name}\nPicture: \nChart: chart.json\nLevel: {level}\nComposer: {composer}\nCharter: {charter}\nIllustrator: {illustrator}\n");
         files.insert("info.txt".into(), info.into_bytes());
         (
             archive::write_zip(&files).map_err(msg)?,
@@ -360,6 +402,9 @@ fn prepare_chart(source: &Path, cache: &Path, music: Option<&Path>) -> Result<Ch
             warnings,
             title,
             level,
+            composer,
+            charter,
+            illustrator,
             music.is_some(),
         )
     };
@@ -370,6 +415,9 @@ fn prepare_chart(source: &Path, cache: &Path, music: Option<&Path>) -> Result<Ch
             source: source.to_string_lossy().into_owned(),
             title,
             level,
+            composer,
+            charter,
+            illustrator,
             format: format_name(format),
             notes,
             lines,
@@ -381,9 +429,162 @@ fn prepare_chart(source: &Path, cache: &Path, music: Option<&Path>) -> Result<Ch
     })
 }
 
+fn replace_info_fields(text: &str, fields: &[(&str, &str)]) -> String {
+    let mut found = vec![false; fields.len()];
+    let mut lines = Vec::new();
+    for line in text.lines() {
+        if let Some((key, _)) = line.split_once(':') {
+            if let Some((index, (_field, value))) = fields
+                .iter()
+                .enumerate()
+                .find(|(_, (field, _))| key.trim().eq_ignore_ascii_case(field))
+            {
+                found[index] = true;
+                lines.push(format!("{key}: {value}"));
+                continue;
+            }
+        }
+        lines.push(line.to_owned());
+    }
+    for (index, (field, value)) in fields.iter().enumerate() {
+        if !found[index] {
+            lines.push(format!("{field}: {value}"));
+        }
+    }
+    lines.join("\n") + "\n"
+}
+
+#[tauri::command]
+fn save_render_metadata(
+    state: State<'_, AppState>,
+    title: String,
+    level: String,
+    composer: String,
+    charter: String,
+    illustrator: String,
+) -> Result<ChartView, String> {
+    let clean = |value: String| {
+        value
+            .chars()
+            .filter(|c| *c != '\r' && *c != '\n')
+            .collect::<String>()
+            .trim()
+            .to_owned()
+    };
+    let title = clean(title);
+    let level = clean(level);
+    let composer = clean(composer);
+    let charter = clean(charter);
+    let illustrator = clean(illustrator);
+
+    let mut inner = state.0.lock().unwrap();
+    if inner.stdin.is_some() || inner.preview_stdin.is_some() {
+        return Err("请先结束当前渲染任务，再编辑谱面信息".into());
+    }
+    let cache = inner.cache.clone();
+    let chart = inner.chart.as_mut().ok_or("请先打开谱面")?;
+    let mut files =
+        archive::read_zip(&std::fs::read(&chart.prepared).map_err(msg)?).map_err(msg)?;
+    let info_path = files
+        .keys()
+        .find(|name| {
+            name.rsplit('/').next().is_some_and(|base| {
+                base.eq_ignore_ascii_case("info.txt") || base.eq_ignore_ascii_case("info.yml")
+            })
+        })
+        .cloned()
+        .ok_or("谱面资源包缺少 info.txt / info.yml，无法编辑渲染信息")?;
+    let info_text = std::str::from_utf8(files.get(&info_path).ok_or("无法读取谱面信息")?)
+        .map_err(|_| "谱面信息不是有效 UTF-8 文本")?;
+    let is_yaml = info_path.to_ascii_lowercase().ends_with("info.yml");
+    let quote = |value: &str| {
+        if is_yaml {
+            serde_json::to_string(value).unwrap_or_else(|_| "\"\"".into())
+        } else {
+            value.to_owned()
+        }
+    };
+    let values = [
+        quote(&title),
+        quote(&level),
+        quote(&composer),
+        quote(&charter),
+        quote(&illustrator),
+    ];
+    let names = if is_yaml {
+        ["name", "level", "composer", "charter", "illustrator"]
+    } else {
+        ["Name", "Level", "Composer", "Charter", "Illustrator"]
+    };
+    let fields: Vec<(&str, &str)> = names
+        .iter()
+        .copied()
+        .zip(values.iter().map(String::as_str))
+        .collect();
+    let updated = replace_info_fields(info_text, &fields);
+    files.insert(info_path, updated.into_bytes());
+    let packed = archive::write_zip(&files).map_err(msg)?;
+    let prepared = cache.join(format!(
+        "chart-{}-{}-metadata.pez",
+        std::process::id(),
+        unique()
+    ));
+    std::fs::write(&prepared, packed).map_err(msg)?;
+    let old_prepared = std::mem::replace(&mut chart.prepared, prepared);
+    let _ = std::fs::remove_file(old_prepared);
+    chart.view.title = title;
+    chart.view.level = level;
+    chart.view.composer = composer;
+    chart.view.charter = charter;
+    chart.view.illustrator = illustrator;
+    let view = chart.view.clone();
+    if let Some(path) = inner.preview_path.take() {
+        let _ = std::fs::remove_file(path);
+    }
+    if let Some(path) = inner.preview_video_path.take() {
+        let _ = std::fs::remove_file(path);
+    }
+    inner.preview_task = TaskView::default();
+    Ok(view)
+}
+
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> Settings {
     state.0.lock().unwrap().settings.clone()
+}
+#[tauri::command]
+async fn fetch_bilibili_display_name() -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("PhiRender/0.1 (public Bilibili profile lookup)")
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(msg)?;
+    let response = client
+        .get("https://api.bilibili.com/x/web-interface/card?mid=1586434757")
+        .header(
+            reqwest::header::REFERER,
+            "https://space.bilibili.com/1586434757",
+        )
+        .send()
+        .await
+        .map_err(|e| format!("无法获取 B 站作者名称：{e}"))?
+        .error_for_status()
+        .map_err(|e| format!("B 站作者信息请求失败：{e}"))?;
+    let value: Value = response
+        .json()
+        .await
+        .map_err(|e| format!("无法读取 B 站作者信息：{e}"))?;
+    if value["code"].as_i64() != Some(0) {
+        return Err(value["message"]
+            .as_str()
+            .unwrap_or("B 站暂时无法提供作者名称")
+            .to_owned());
+    }
+    value["data"]["card"]["name"]
+        .as_str()
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| "B 站返回的作者名称为空".into())
 }
 #[tauri::command]
 fn save_settings(state: State<'_, AppState>, settings: Settings) -> Result<(), String> {
@@ -394,6 +595,10 @@ fn save_settings(state: State<'_, AppState>, settings: Settings) -> Result<(), S
         || !(0.0..=2.0).contains(&settings.hitsound_volume)
         || ![30, 60, 120].contains(&settings.fps)
         || ![480, 720, 1080].contains(&settings.preview_resolution)
+        || ![1, 2, 4, 8].contains(&settings.sample_count)
+        || !settings.chart_delay_ms.is_finite()
+        || !(-10_000.0..=10_000.0).contains(&settings.chart_delay_ms)
+        || !settings.experimental_config.is_object()
         || ![(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)]
             .contains(&(settings.width, settings.height))
     {
@@ -683,6 +888,7 @@ fn start_task(
     let job = json!({"kind":worker_kind,"chart":chart.prepared,"output":dest,"project_root":inner.root,"skin":settings.skin,"font":settings.font,
         "width":width,"height":height,"fps":fps,"time":time.max(0.),"start":start,"end":end,"show_hud":settings.show_hud,"include_audio":settings.include_audio,
         "hitsounds":settings.hitsounds,"music_volume":settings.music_volume,"hitsound_volume":settings.hitsound_volume,"nvenc":settings.nvenc,
+        "sample_count":settings.sample_count,"chart_delay_ms":settings.chart_delay_ms,"experimental_config":settings.experimental_config,
         "click_sound":sound_path(&settings.click_sound,"click"),"drag_sound":sound_path(&settings.drag_sound,"drag"),"flick_sound":sound_path(&settings.flick_sound,"flick")});
     let job_path = inner.cache.join(format!("job-{id}.json"));
     std::fs::write(&job_path, serde_json::to_vec(&job).map_err(msg)?).map_err(msg)?;
@@ -1056,8 +1262,10 @@ fn main() {
         .manage(AppState(Arc::new(Mutex::new(initial))))
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            fetch_bilibili_display_name,
             save_settings,
             open_chart,
+            save_render_metadata,
             attach_music,
             choose_font,
             choose_sound,

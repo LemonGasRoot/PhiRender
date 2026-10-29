@@ -1,46 +1,69 @@
-# Phigros → RPEN converter
+# PhiRender
 
-Rust library and command-line converter for official Phigros v3 charts. Standard output (the default) contains the mapped RPEN runtime chart without a duplicate source document. Archive output additionally preserves the complete original official document under `rpeNextLegacySource.document` for debugging and recovery.
+![PhiRender logo](apps/desktop/src/assets/phirender-logo.svg)
 
-## CLI
+PhiRender is a Windows desktop app and command-line toolkit for converting and rendering Phigros charts. It accepts official Phigros charts and RPE/RPEN charts, converts official charts to RPEN when needed, and renders previews or video using a GPU drawing pipeline.
 
-```text
-phigros-rpen INPUT OUTPUT [--mode standard|archive]
-```
+> **License status:** this repository contains components under different terms. The RPEN maintainer has confirmed permission for noncommercial use only; this does not relicense RPEN code under GPL. The converter remains under PolyForm Noncommercial 1.0.0, and the reused Phira Pro rendering code is GPL-3.0-only. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) before redistributing combined builds.
 
-Examples:
+## What it includes
+
+- **PhiRender GUI** — open JSON/PEZ charts, inspect chart information and conversion diagnostics, generate a preview, edit export metadata, and export video.
+- **CLI renderer** — convert official charts as needed and render video, with segment export, sound controls, skins, fonts, anti-aliasing, and software or NVIDIA NVENC encoding.
+- **Pure RPEN renderer** — render an existing RPEN chart without format conversion.
+- **Chart converter library and CLI** — convert official Phigros v3 JSON/PEZ to RPEN, with standard and archive output modes.
+- **GPU drawing** — the renderer uses Macroquad/OpenGL for drawing. Frames are read back to CPU memory before FFmpeg encodes them. NVENC accelerates encoding only; the full video pipeline is not GPU-only.
+
+The renderer is based on the Phira Pro rendering code. The original Phira Pro application is not required at runtime. The GUI and command-line usage details are in [apps/desktop/README.md](apps/desktop/README.md) and [README-CLI.md](README-CLI.md).
+
+## Windows development build
+
+Target platform: Windows 10/11 x64. Install Git, Rust, Node.js, the Windows C++ build tools, and WebView2 Runtime. A first build also downloads Cargo and npm dependencies.
+
+The renderer uses a pinned Phira Pro source checkout with PhiRender changes. Restore it before building:
 
 ```powershell
-phigros-rpen chart.json chart.rpe.json
-phigros-rpen chart.pez converted.pez
-phigros-rpen input.zip output.zip
-phigros-rpen chart.json chart-archived.rpe.json --mode archive
+powershell -ExecutionPolicy Bypass -File .\tools\restore-phira.ps1
 ```
 
-Official JSON is converted. Ordinary RPE/RPEN JSON is detected and passed through unchanged. `--mode standard` is the default and emits only RPEN fields needed for playback, including all mapped notes, judge-line tracks, and noise-area geometry and animation. `--mode archive` additionally embeds the entire official source JSON. For PEZ/ZIP input, the converter uses `info.txt`/`info.yml` chart references when multiple recognized chart JSON files exist, replaces only the selected JSON at its existing path, and raw-copies every other archive member. Output is reopened and checked for valid CRCs, a parseable chart, and byte-identical non-chart assets. Ambiguous or unrecognized archives are reported as errors.
+The restore script refuses to overwrite an existing `work\Phira-Pro` directory. It checks out the recorded upstream commit, applies the tracked patch, and copies the included project-generated CC0 fallback skin and notices. It does not include or grant redistribution rights for the upstream skin or fonts.
 
-## Library
+Build the CLI programs and GPU worker:
 
-```rust
-use phigros_rpen_converter::{convert_json, convert_json_with_mode, parse_document, OutputMode};
-
-let input = std::fs::read_to_string("chart.json")?;
-let parsed = parse_document(&input)?;
-let (output_json, report) = convert_json(&input)?;
-let (debug_json, _) = convert_json_with_mode(&input, OutputMode::Archive)?;
-println!("{:?}: {} notes", parsed.format, report.notes);
-std::fs::write("chart.rpe.json", output_json)?;
-# Ok::<(), Box<dyn std::error::Error>>(())
+```powershell
+cargo build --release --bin phigros-rpen
+cargo build --release --bin phigros-render-cli
+cargo build --release --bin phigros-render-pure
+cargo build --release --bin phirender-gpu-worker
 ```
 
-The library API is available as `convert_json_with_mode` and `archive::convert_archive_with_mode`; each defaults to standard mode through `convert_json` and `archive::convert_archive`.
+Build the desktop GUI:
 
-## Scope and fidelity
+```powershell
+Push-Location .\apps\desktop
+npm ci
+npm run build
+Pop-Location
+cargo build --release --features custom-protocol --manifest-path .\apps\desktop\src-tauri\Cargo.toml
+```
 
-Implemented: official v3 BPM/time conversion, judge lines, Tap/Drag/Hold/Flick notes, line speed/move/rotate/alpha events, block/noise area geometry, active intervals, movement/scale/rotation keys, metadata, and archive asset preservation. Event keyframes and mapped values follow RPEN 0.13.0 import behavior, including alpha integer conversion and special noise easing handling. Both output modes serialize compact JSON. Archive-only source metadata is not required by the RPEN renderer.
+The Tauri desktop executable and `phirender-gpu-worker.exe` must be placed together. FFmpeg is required for video export. The CLI can use an FFmpeg path supplied on the command line or through `PHIRA_FFMPEG`; see [README-CLI.md](README-CLI.md). The development renderer also reads Phira Pro runtime assets from `work\Phira-Pro\assets`; those assets are intentionally not copied into this repository.
 
-Warnings in the conversion report identify fidelity limits. Future or unknown official fields are omitted from standard runtime output with a warning; archive mode preserves them in the original-source field, but they are not guaranteed to affect playback. Non-chart ZIP members retain their compressed data and metadata. The rewritten chart retains its original path, compression method, timestamp, and permissions. ZIP entry comments on the rewritten chart cannot be retained by the current ZIP library and are reported. Encrypted or nonstandard containers are not supported.
+## Project layout
 
-## Licensing
+```text
+src/                         Rust converter library and CLI renderers
+apps/desktop/                Tauri 2 + React GUI
+tests/                       converter semantic tests
+vendor-snapshots/phira-pro/  pinned source commit, local patch, and project notices
+tools/                       local source restore and snapshot maintenance scripts
+README-CLI.md                command-line usage
+```
 
-This project’s converter behavior is based on `kclg-YSJ/rpe-next` 0.13.0, licensed under PolyForm Noncommercial 1.0.0. The corresponding license is included in `LICENSE`; use and redistribution must follow its terms. Third-party Rust dependencies retain their own licenses.
+User charts, downloaded assets, generated videos, build outputs, and the local Phira Pro checkout are excluded by `.gitignore`.
+
+## Repository description for GitHub
+
+> A Windows Phigros chart converter and GPU renderer with GUI, CLI, preview, and video export.
+
+Suggested topics: `phigros`, `rhythm-game`, `chart-renderer`, `rust`, `windows`, `gpu-rendering`, `tauri`.
