@@ -3,7 +3,7 @@ name = "phigros-rpen-converter"
 version = "0.1.0"
 edition = "2021"
 description = "PhiRender: Phigros chart conversion and GPU rendering toolkit"
-license = "PolyForm-Noncommercial-1.0.0"
+license = "GPL-3.0-only"
 
 [features]
 default = ["render"]

@@ -2,68 +2,72 @@
 
 ![PhiRender logo](apps/desktop/src/assets/phirender-logo.svg)
 
-PhiRender is a Windows desktop app and command-line toolkit for converting and rendering Phigros charts. It accepts official Phigros charts and RPE/RPEN charts, converts official charts to RPEN when needed, and renders previews or video using a GPU drawing pipeline.
+## 中文
 
-> **Source license:** PhiRender source code is GPL-3.0-only. The RPEN maintainer explicitly confirmed that the RPEN-derived conversion code may be used, modified, and distributed with PhiRender under GPL-3.0-only. PhiRender is maintained for noncommercial use; GPL recipients still receive the rights stated in GPL-3.0, including commercial use. Third-party fonts, assets, and dependencies retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+PhiRender 是面向 Windows 10/11 x64 的 Phigros 谱面转换与 GPU 渲染工具，提供桌面 GUI、命令行程序、实时预览和视频导出。
 
-## What it includes
+### 下载与使用
 
-- **PhiRender GUI** — open JSON/PEZ charts, inspect chart information and conversion diagnostics, generate a preview, edit export metadata, and export video.
-- **CLI renderer** — convert official charts as needed and render video, with segment export, sound controls, skins, fonts, anti-aliasing, and software or NVIDIA NVENC encoding.
-- **Pure RPEN renderer** — render an existing RPEN chart without format conversion.
-- **Chart converter library and CLI** — convert official Phigros v3 JSON/PEZ to RPEN, with standard and archive output modes.
-- **GPU drawing** — the renderer uses Macroquad/OpenGL for drawing. Frames are read back to CPU memory before FFmpeg encodes them. NVENC accelerates encoding only; the full video pipeline is not GPU-only.
+从 [GitHub Releases](https://github.com/LemonGasRoot/PhiRender/releases/latest) 下载 Windows x64 压缩包，解压后运行 `PhiRender.exe`。请保留压缩包中的 `phirender-gpu-worker.exe` 和 `work` 资源目录。视频导出需要另行安装 FFmpeg，并确保 `ffmpeg.exe` 在系统 `PATH` 中；CLI 也支持通过参数指定 FFmpeg 路径。更多命令行用法见 [CLI 使用说明](README-CLI.md)。
 
-The renderer is based on the Phira Pro rendering code. The original Phira Pro application is not required at runtime. The GUI and command-line usage details are in [apps/desktop/README.md](apps/desktop/README.md) and [README-CLI.md](README-CLI.md).
+### 功能
 
-## Windows development build
+- 导入 Phigros 官方 JSON/PEZ、普通 RPE 和 RPEN 谱面。
+- 将官方谱面转换为 RPEN 数据；现有 RPE/RPEN 谱面直接进入渲染流程。
+- GUI 管理谱面、皮肤、字体、打击音效和视频导出设置。
+- CLI 支持谱面转换、纯 RPEN 渲染、片段导出、音频导出和视频编码选项。
+- 画面由 Phira Pro 渲染核心通过 OpenGL 绘制。NVENC 可加速视频编码；帧仍会从 GPU 回读到 CPU，因此整个视频管线并非全 GPU。
 
-Target platform: Windows 10/11 x64. Install Git, Rust, Node.js, the Windows C++ build tools, and WebView2 Runtime. A first build also downloads Cargo and npm dependencies.
+### 性能对比
 
-The renderer uses a pinned Phira Pro source checkout with PhiRender changes. Restore it before building:
+**在相同谱面、1920×1080、60 FPS、H.264 NVENC 和近似输出码率（约 12 Mbps）下，PhiRender 比 PhiVideo 快 2.7×：58.28 秒对 157.71 秒。**
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\restore-phira.ps1
-```
+基准测试使用同一份《PANIC PARADISE》原始 PEZ，完整谱面共 7751 帧、时长约 129.17 秒。两边都是 H.264 NVENC，最终平均总码率分别约 12.34 Mbps 和 12.31 Mbps。计时从渲染命令启动到 MP4 完成；两种渲染器算法不同，近似码率也不等于主观画质完全一致，结果不代表逐像素相同。
 
-The restore script refuses to overwrite an existing `work\Phira-Pro` directory. It checks out the recorded upstream commit, applies the tracked patch, and copies the included project-generated CC0 fallback skin and notices. It does not include or grant redistribution rights for the upstream skin or fonts.
+### 已知渲染差异
 
-Build the CLI programs and GPU worker:
+本渲染引擎以 Phira Pro 渲染核心为基础，因此不可避免地可能出现部分 Hold 长条错位和流速表现差异（Phira 特性）。
 
-```powershell
-cargo build --release --bin phigros-rpen
-cargo build --release --bin phigros-render-cli
-cargo build --release --bin phigros-render-pure
-cargo build --release --bin phirender-gpu-worker
-```
+### 从源码构建
 
-Build the desktop GUI:
+需要 Rust、Node.js、Windows C++ Build Tools 和 WebView2 Runtime。按 [开发构建说明](apps/desktop/README.md)准备依赖并构建 GUI、CLI 与渲染 Worker。开发环境通过 `tools/restore-phira.ps1` 还原指定的 Phira Pro 源码版本。
 
-```powershell
-Push-Location .\apps\desktop
-npm ci
-npm run build
-Pop-Location
-cargo build --release --features custom-protocol --manifest-path .\apps\desktop\src-tauri\Cargo.toml
-```
+### 许可证
 
-The Tauri desktop executable and `phirender-gpu-worker.exe` must be placed together. FFmpeg is required for video export. The CLI can use an FFmpeg path supplied on the command line or through `PHIRA_FFMPEG`; see [README-CLI.md](README-CLI.md). The development renderer also reads Phira Pro runtime assets from `work\Phira-Pro\assets`; those assets are intentionally not copied into this repository.
+PhiRender 源码以 GPL-3.0-only 发布。RPEN 作者已明确同意相关转换代码随 PhiRender 按 GPL-3.0-only 使用、修改和分发；项目自身以非商业方式维护。GPL 接收者仍拥有 GPL 明确授予的权利，包括商业使用。字体、皮肤和依赖的具体许可见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
-## Project layout
+---
 
-```text
-src/                         Rust converter library and CLI renderers
-apps/desktop/                Tauri 2 + React GUI
-tests/                       converter semantic tests
-vendor-snapshots/phira-pro/  pinned source commit, local patch, and project notices
-tools/                       local source restore and snapshot maintenance scripts
-README-CLI.md                command-line usage
-```
+## English
 
-User charts, downloaded assets, generated videos, build outputs, and the local Phira Pro checkout are excluded by `.gitignore`.
+PhiRender is a Phigros chart converter and GPU renderer for Windows 10/11 x64. It includes a desktop GUI, command-line tools, preview rendering, and video export.
 
-## Repository description for GitHub
+### Download and run
 
-> A Windows Phigros chart converter and GPU renderer with GUI, CLI, preview, and video export.
+Download the Windows x64 archive from [GitHub Releases](https://github.com/LemonGasRoot/PhiRender/releases/latest), extract it, and run `PhiRender.exe`. Keep `phirender-gpu-worker.exe` and the bundled `work` resources beside it. Video export requires FFmpeg on your system `PATH`; the CLI can also accept an explicit FFmpeg path. See the [CLI guide](README-CLI.md).
 
-Suggested topics: `phigros`, `rhythm-game`, `chart-renderer`, `rust`, `windows`, `gpu-rendering`, `tauri`.
+### Features
+
+- Imports official Phigros JSON/PEZ, regular RPE, and RPEN charts.
+- Converts official charts to RPEN data and sends existing RPE/RPEN charts directly to rendering.
+- GUI controls for charts, skins, fonts, hit sounds, and video export.
+- CLI tools for conversion, pure RPEN rendering, segment/audio export, and video encoder settings.
+- The Phira Pro rendering core draws through OpenGL. NVENC can accelerate encoding, but frames are read back from GPU to CPU, so the entire video pipeline is not GPU-only.
+
+### Performance comparison
+
+**On the same chart at 1920×1080, 60 FPS, H.264 NVENC, and a similar output bitrate (about 12 Mbps), PhiRender was 2.7× faster than PhiVideo: 58.28 seconds vs. 157.71 seconds.**
+
+The benchmark used the same original *PANIC PARADISE* PEZ for both renderers: 7,751 frames and about 129.17 seconds. Both used H.264 NVENC; the final average total bitrates were about 12.34 Mbps and 12.31 Mbps. Timing covers the full command from launch until the MP4 was completed. The renderers use different visual algorithms; similar bitrate does not establish identical perceived image quality, and the output is not pixel-identical.
+
+### Known rendering differences
+
+This renderer is based on the Phira Pro rendering core. Some Hold-note bars may be misaligned, and scroll-speed behavior may differ; these are known Phira-core characteristics.
+
+### Build from source
+
+You need Rust, Node.js, Windows C++ Build Tools, and the WebView2 Runtime. Follow the [development build guide](apps/desktop/README.md) to build the GUI, CLI tools, and rendering worker. Development builds restore the pinned Phira Pro source with `tools/restore-phira.ps1`.
+
+### License
+
+PhiRender source is released under GPL-3.0-only. The RPEN author explicitly authorized the relevant conversion code to be used, modified, and distributed with PhiRender under GPL-3.0-only. PhiRender itself is maintained for noncommercial use; GPL recipients retain all rights granted by GPL, including commercial use. See [third-party notices](THIRD_PARTY_NOTICES.md) for fonts, skins, and dependencies.

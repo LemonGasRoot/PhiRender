@@ -16,13 +16,16 @@ PhiVideo source is MIT-licensed. It was inspected as a rendering reference; PhiR
 
 ## Fonts and skins
 
-- The GUI bundles Saira Regular under the SIL Open Font License 1.1. Its license notice is at `apps/desktop/src-tauri/resources/Saira-OFL.txt`; source: [Omnibus-Type/Saira](https://github.com/Omnibus-Type/Saira).
+- The GUI and Windows release bundle Saira Regular under the SIL Open Font License 1.1. The release also uses this font as a fallback for renderer font files. Its license notice is at `apps/desktop/src-tauri/resources/Saira-OFL.txt`; source: [Omnibus-Type/Saira](https://github.com/Omnibus-Type/Saira).
 - `vendor-snapshots/phira-pro/untracked/assets/respack-open/` is a project-generated fallback skin dedicated to the public domain under CC0 1.0. Its notice is included as `LICENSE.txt` in that directory. The source generator is `vendor-snapshots/phira-pro/untracked/tools/generate_open_respack.py`.
-- The upstream Phira Pro checkout contains other skins, fonts, and runtime assets whose redistribution terms are not documented here. They are not copied into this repository or release packages. Users must review the upstream terms before redistributing them.
+- The Windows release includes the Phira Pro runtime images required by the renderer (rank, modifier, and gameplay UI assets) from its GPL-3.0-only source tree. It excludes upstream fonts, sample charts, songs, and undocumented skins; Saira and the CC0 fallback skin are used instead.
+- The RPEN noise-skin and shader resources included in the Windows release retain their upstream PolyForm Noncommercial 1.0.0 license and notices (`assets/rpen/LICENSE-RPEN.txt` and `assets/rpen/NOTICE.txt`). They are separate from the RPEN conversion-code permission described above.
+- Other upstream Phira Pro skins and fonts whose redistribution terms are not documented here are not copied into this repository or release packages. Users must review the upstream terms before redistributing them.
 - User-provided chart archives, skins, fonts, sound effects, and illustrations are not included in the source repository.
 
 ## Other software
 
+- The Windows release includes the x64 `WebView2Loader.dll` distributed with the WebView2 SDK. Microsoft documents that this loader must be shipped with WebView2 applications; the Microsoft Edge WebView2 Runtime is a separate prerequisite and is not included. See [Microsoft's WebView2 distribution guidance](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution).
 - Tauri and associated Rust crates retain their upstream licenses.
 - React, Vite, TypeScript, and other npm packages retain their upstream licenses. See `apps/desktop/package-lock.json` and each package's license files.
 - FFmpeg is an external runtime dependency and retains the license of the build selected by the user or distributor. A release package must identify the exact FFmpeg build and comply with its configuration-specific license.
