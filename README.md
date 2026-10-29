@@ -4,7 +4,7 @@
 
 PhiRender is a Windows desktop app and command-line toolkit for converting and rendering Phigros charts. It accepts official Phigros charts and RPE/RPEN charts, converts official charts to RPEN when needed, and renders previews or video using a GPU drawing pipeline.
 
-> **License status:** this repository contains components under different terms. The RPEN maintainer has confirmed permission for noncommercial use only; this does not relicense RPEN code under GPL. The converter remains under PolyForm Noncommercial 1.0.0, and the reused Phira Pro rendering code is GPL-3.0-only. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) before redistributing combined builds.
+> **Source license:** PhiRender source code is GPL-3.0-only. The RPEN maintainer explicitly confirmed that the RPEN-derived conversion code may be used, modified, and distributed with PhiRender under GPL-3.0-only. PhiRender is maintained for noncommercial use; GPL recipients still receive the rights stated in GPL-3.0, including commercial use. Third-party fonts, assets, and dependencies retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## What it includes
 

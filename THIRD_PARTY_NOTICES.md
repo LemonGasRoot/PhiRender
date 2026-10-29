@@ -4,11 +4,11 @@ This file identifies major bundled, referenced, or source-derived components. It
 
 ## Phira Pro renderer
 
-PhiRender's rendering code is based on Phira Pro, licensed under GPL-3.0-only. The development source is restored from the upstream commit recorded in `vendor-snapshots/phira-pro/BASE_COMMIT.txt`; `vendor-snapshots/phira-pro/local-changes.patch` contains PhiRender's local changes. See [Phira Pro](https://github.com/Phira-Pro/Phira-Pro) and its included GPL license. If distributing a combined application or binary, comply with GPL-3.0 obligations and resolve its interaction with the converter's separate license first.
+PhiRender's rendering code is based on Phira Pro, licensed under GPL-3.0-only. The development source is restored from the upstream commit recorded in `vendor-snapshots/phira-pro/BASE_COMMIT.txt`; `vendor-snapshots/phira-pro/local-changes.patch` contains PhiRender's local changes. See [Phira Pro](https://github.com/Phira-Pro/Phira-Pro) and its included GPL license. The project source is distributed under GPL-3.0-only. Any combined application or binary distribution must comply with GPL-3.0 obligations.
 
 ## Official chart conversion
 
-The converter behavior follows RPEN/Re:PhiEdit Next 0.13.0. The top-level `LICENSE` contains the PolyForm Noncommercial 1.0.0 terms. The RPEN maintainer replied that use is limited to noncommercial purposes (Bilibili reply dated 2026-10-28; the project owner retains the conversation as evidence). This permission does not by itself change the code's license to GPL or authorize commercial use. See [rpe-next](https://github.com/kclg-YSJ/rpe-next).
+The converter includes code and conversion behavior derived from RPEN/Re:PhiEdit Next 0.13.0, whose upstream project is licensed under PolyForm Noncommercial 1.0.0. The RPEN maintainer explicitly authorized PhiRender to use, modify, and distribute the relevant code with this project under GPL-3.0-only in a Bilibili reply dated 2026-10-29; the project owner retains the exchange as evidence. PhiRender is maintained for noncommercial use. The GPL-3.0-only grant itself carries the rights stated in GPL-3.0 for recipients. This project-specific permission does not change the license of the separate rpe-next upstream repository. See [rpe-next](https://github.com/kclg-YSJ/rpe-next).
 
 ## PhiVideo
 
