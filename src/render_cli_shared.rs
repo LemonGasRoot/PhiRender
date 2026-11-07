@@ -177,12 +177,7 @@ async fn run_inner(mode: RunMode) -> Result<()> {
             format!("Could not read renderer font {}", pgr_font_path.display())
         })?)
         .map_err(|error| anyhow!("Could not load Phigros font: {error}"))?;
-    let hud_font_path = args.font.clone().or_else(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|path| path.parent().map(|parent| parent.join("saira-regular.ttf")))
-            .filter(|path| path.is_file())
-    });
+    let hud_font_path = args.font.clone();
     let hud_font = if let Some(path) = hud_font_path {
         FontArc::try_from_vec(
             std::fs::read(&path)
@@ -190,7 +185,10 @@ async fn run_inner(mode: RunMode) -> Result<()> {
         )
         .map_err(|error| anyhow!("Could not load HUD font {}: {error}", path.display()))?
     } else {
-        pgr_font.clone()
+        FontArc::try_from_vec(
+            include_bytes!("../apps/desktop/src-tauri/resources/saira-regular.ttf").to_vec(),
+        )
+        .map_err(|error| anyhow!("Could not load built-in Saira-Regular: {error}"))?
     };
     let mut hud_painter = TextPainter::new(hud_font, Some(font.clone()));
     hud_painter.normalize_to(&pgr_font);

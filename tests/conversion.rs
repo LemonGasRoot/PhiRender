@@ -601,3 +601,30 @@ fn supplied_real_pez_archives_convert_and_preserve_members() {
     assert_eq!(rpen_report.format, ChartFormat::Rpen);
     assert_eq!(archive::read_zip(&rpen_roundtrip).unwrap(), reference_files);
 }
+#[test]
+fn official_hold_length_metadata_is_independent_of_rpe_scroll_speed() {
+    let mut source = official();
+    source["judgeLineList"][0]["notesBelow"][0]["speed"] = json!(5.0);
+    for mode in [OutputMode::Standard, OutputMode::Archive] {
+        let (converted, _) = convert_official_with_mode(&source, mode).unwrap();
+        let notes = converted["judgeLineList"][0]["notes"].as_array().unwrap();
+        let hold = notes.iter().find(|n| n["type"] == 2).unwrap();
+        assert_eq!(
+            hold["speed"], 1.0,
+            "head scrolling must retain RPE semantics"
+        );
+        assert_eq!(
+            hold["phiRenderOfficialHold"],
+            json!({"version":1,"speed":5.0})
+        );
+        assert!(notes
+            .iter()
+            .find(|n| n["type"] == 1)
+            .unwrap()
+            .get("phiRenderOfficialHold")
+            .is_none());
+        if mode == OutputMode::Standard {
+            assert!(converted.get("rpeNextLegacySource").is_none());
+        }
+    }
+}

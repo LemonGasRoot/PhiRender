@@ -1,0 +1,1078 @@
+diff --git a/README.md b/README.md
+index 05c0b4c..3024ad3 100644
+--- a/README.md
++++ b/README.md
+@@ -30,23 +30,37 @@
+ | 谱面格式 | 官方 phi 格式 3 / 4.0（含 `blockAreaList`）、RPE / RPE-next（自动嗅探） |
+ | 噪域 | 官方 NoiseField 材质逐 pass 复刻：6-bit 块遮罩（屏幕 1/8 分辨率）+ 14 个全屏 pass（compose / edge / 5×glow / glowExtract / disabled / ready / copy / touchMask / main） |
+ | 音符 | Tap / Drag / Flick / Hold，above / below 两层，多押 MH 宽贴图，Hold 三段切图 |
+-| 打击特效 | 官方 5×6 HitFx 图集 + 粒子 + 加色混合；长条首击必出、按住期间只留火花 |
++| 打击特效 | 对齐 PhiVideo：5×6 HitFx 图集、正常透明度合成、屏幕朝向光圈、四个方形粒子；长条每半拍补发完整特效 |
+ | 音频 | 音乐 + 官方打击音自动混音（RMS 平衡 + 峰值限制器 + AAC 44.1k） |
+ | 视频 | GPU 回读 → NV12 → 多进程并行 x264 → 封装 MP4；支持 PNG 序列与单帧 |
+ | Add-ons | 全屏后处理插件，**并且可以改谱面**：注入噪域、隐藏音符/判定线、追加音符与判定线 |
+ | 观感开关 | 镜像、判定线金色/白色、音符尺寸、特效尺寸、背景模糊与明暗、流速、多押提示 |
+-| 无 HUD | 画面上没有分数/连击/进度条——这是纯谱面渲染器 |
++| HUD | 默认关闭；可用 `--hud` 显示暂停符号、分数、自动连击、歌曲名和难度 |
++
++### HUD（PhiRender 对照移植）
++
++此分支加入可选 HUD。未传 `--hud` 时维持原有纯谱面输出。HUD 使用 OpenGL 纹理叠加到最终帧；歌曲信息默认使用随附的 Saira 字体。游戏内 HUD 字体可通过路径和字体家族参数指定：
++
++```bash
++out/phirender.exe --chart chart.json --bg illustration.png --time 50 --out frame.png \
++  --w 1920 --h 1080 --hud \
++  --hud-font path/to/font.ttf --hud-font-family "Font Family" \
++  --info-font assets/default/hud/saira-regular.ttf --info-font-family Saira
++```
++
++HUD 的位置与字体按 PhiRender 对照校准。计数始终按绝对时间戳计算：普通音符在头判计入，长条在尾判完成时计入，因此单帧预览、跳转、分段导出与连续视频保持一致。Phigros 字体未随上游打包；本地已有授权字体可通过 `--hud-font` 指定。
+ 
+ ---
+ 
+ ## 快速开始
+ 
+ ```bash
+-# 构建（MinGW-w64 g++ 8.1+，无第三方依赖；OpenGL 函数用自写加载器）
++# 构建（MinGW-w64 g++ 8.1+；OpenGL 函数用自写加载器）
+ bash build.sh
+ 
+ # 运行时依赖：PATH 上的 ffmpeg（必须带 libx264）。2013 年的老构建与 9.x 新构建都可用：
+ # 音频编码器在新版没有 libvo_aacenc 时会自动降级到原生 aac，细节见 ffmpeg-compat-notes.md
++# build.sh 会把所需的 libwinpthread-1.dll 和对应许可文本复制到 out/
+ 
+ # 单帧
+ ./out/phirender.exe --chart test/desultory/chart.json --time 100 --out frame.png
+@@ -249,20 +263,11 @@ shader 直接写 `main()`，不需要 `#version`——头文件会自动补上
+ 
+ ## 长条长度的算法
+ 
+-长条长度 = 判定线速度沿这条长条自身拍区间的**积分**，不是「时长 × 当前速度」：
++官谱长条使用 PhiVideo 的规则：主体长度 = 长条时长 × 长条自身 speed × 0.6 × 输出高度。未命中时，头部仍沿判定线速度积分移动；命中后头部固定在线上，主体按剩余时间缩短。改变判定线速度不会改变长条固有长度。
+ 
+-```
+-P_J(t)   = p_k + v_k · (t − t_k) / (1.875 / BPM)     # 判定线垂直位置
+-headDist = (note.floorPosition − P_J(now))   · PGRH · H
+-endDist  = (P_J(tailTime)      − P_J(now))   · PGRH · H
+-length   = endDist − headDist                        # 与 now 无关
+-```
+-
+-头尾两端沿同一条速度曲线移动、导数相同，所以**接近过程中长度恒定**（刚性条）；只有在谱面速度事件落在长条跨越的区间内时，不同长条才会呈现不同长度。公式来源：[Lchzh Docs 相关计算](https://docs.lchzh.net/learning/phigros/calc)。
++官方 JSON 直接使用原始 speed。官谱经 PhiRender 转换成 RPEN 后，`phiRenderOfficialHold: {"version":1,"speed":原始速度}` 保留这项信息，标准版与归档版均支持；RPE 的普通 speed 保持为 1，避免误改头部流速。没有此标记的原生 RPE 长条仍按其积分尾部规则处理。旧标准版若已丢失原始 speed，需要从原始官谱重新转换，不能可靠猜回。
+ 
+-> 曾经用「时长 × 瞬时速度」，在 1:57 那段（0.009 s 长条、速度 19.6）算出 15 px，而积分应为 118 px，屏幕上出现一排贴线小方块。已修正。
+-
+----
++回归样本：DS IN 65–84 秒的 68 个长条，原始 speed=5、时长约 74.257ms，1080p 的主体均约 240.594px。旧积分法错误算成 42.705、64.359 或 136.537px。详见 tests/rpe_regression.cpp。
+ 
+ ## 噪域（Noise Area）
+ 
+diff --git a/build.sh b/build.sh
+index 6253195..632fea6 100644
+--- a/build.sh
++++ b/build.sh
+@@ -5,4 +5,8 @@ cd "$(dirname "$0")"
+ CXX="${CXX:-D:/mingw64/bin/g++.exe}"
+ "$CXX" -O2 -std=c++17 -Ithird_party -Isrc src/*.cpp third_party/cJSON.c \
+     -o out/phirender.exe -lopengl32 -lgdi32 -luser32 -static-libgcc -static-libstdc++ "$@"
++if [ -f "${MINGW_PREFIX:-/mingw64}/bin/libwinpthread-1.dll" ]; then
++    cp "${MINGW_PREFIX:-/mingw64}/bin/libwinpthread-1.dll" out/
++    cp "${MINGW_PREFIX:-/mingw64}/share/licenses/libwinpthread/COPYING" out/libwinpthread-COPYING.txt
++fi
+ echo "built out/phirender.exe"
+diff --git a/src/chart.cpp b/src/chart.cpp
+index c212d7d..8ec2ab8 100644
+--- a/src/chart.cpp
++++ b/src/chart.cpp
+@@ -83,33 +83,31 @@ float sampleSegments(const std::vector<ValueSegment>& segs, float t, float fallb
+     if (idx < 0) return fallback;
+     const ValueSegment& s = segs[(size_t)idx];
+     float p = 1.0f;
+-    if (s.t1 > s.t0) p = std::max(0.0f, std::min(1.0f, (t - s.t0) / (s.t1 - s.t0)));
++    if (s.t1 > s.t0) p = std::max(0.0f, std::min(1.0f, float((t - s.t0) / (s.t1 - s.t0))));
+     return s.v0 + (s.v1 - s.v0) * rpeEase01(s.ease, p);
+ }
+ 
+ float JudgeLine::rpeFpAt(float t) const {
+-    const float fallback = 1.0f;
+-    float fp = 0.0f;
+-    float cur = 0.0f;
+-    for (const ValueSegment& s : rpeSpeed) {
+-        if (s.t1 <= cur) continue;
+-        float a = std::max(cur, s.t0);
+-        float b = std::min(t, s.t1);
+-        if (b > a) {
+-            float va = s.v0 + (s.v1 - s.v0) * ((a - s.t0) / std::max(1e-6f, s.t1 - s.t0));
+-            float vb = s.v0 + (s.v1 - s.v0) * ((b - s.t0) / std::max(1e-6f, s.t1 - s.t0));
+-            fp += (a - cur) * ((cur > 0.0f) ? sampleSegments(rpeSpeed, cur, fallback) : fallback);
+-            fp += (b - a) * (va + vb) * 0.5f;
+-            cur = b;
++    // Integrate the effective track, clipping each event at the next event.
++    // Accumulate in double: dense official conversions otherwise drift by pixels.
++    double fp=0, cursor=0;
++    float last=0;
++    for(size_t i=0;i<rpeSpeed.size();++i){
++        const auto& s=rpeSpeed[i];
++        double start=std::max(0.0,double(s.t0));
++        if(start>t)break;
++        if(start>cursor)fp+=(std::min(double(t),start)-cursor)*last;
++        double end=std::min(double(t),double(s.t1));
++        if(i+1<rpeSpeed.size())end=std::min(end,double(rpeSpeed[i+1].t0));
++        if(end>start){
++            auto value=[&](double at){return s.v0+(s.v1-s.v0)*(at-s.t0)/std::max(1e-12,double(s.t1-s.t0));};
++            fp+=(end-start)*(value(start)+value(end))*0.5;
+         }
+-        if (t <= s.t1) break;
+-        fp += (s.t1 - cur) * 0.5f * (s.v0 + s.v1);
+-        cur = s.t1;
++        cursor=std::max(start,end);last=s.v1;
++        if(t<=end)return float(fp);
+     }
+-    if (t > cur) {
+-        fp += (t - cur) * sampleSegments(rpeSpeed, cur, fallback);
+-    }
+-    return fp;
++    if(t>cursor)fp+=(t-cursor)*last;
++    return float(fp);
+ }
+ 
+ float JudgeLine::fpAt(float beat) const {
+@@ -222,7 +220,17 @@ RpeSample sampleRpeTrack(const std::vector<BlockArea::RpeBlockEvent>& tr, float
+     if (e.endTime > e.time) {
+         float p = clampf((t - e.time) / (e.endTime - e.time), 0.0f, 1.0f);
+         s.progress = p;
+-        s.value = e.value + (e.endValue - e.value) * rpeEase01(e.ease, p);
++        float eased;
++        if (e.bezier) {
++            auto cubic=[](float t,float a,float b){return 3*t*(1-t)*(1-t)*a+3*t*t*(1-t)*b+t*t*t;};
++            float lo=0,hi=1;
++            for(int i=0;i<30;++i){float m=(lo+hi)*0.5f;if(cubic(m,e.points[0],e.points[2])<p)lo=m;else hi=m;}
++            eased=cubic((lo+hi)*0.5f,e.points[1],e.points[3]);
++        } else {
++            float base=rpeEase01(e.ease,e.left), range=rpeEase01(e.ease,e.right)-base;
++            eased=std::fabs(range)<1e-12f?p:(rpeEase01(e.ease,e.left+(e.right-e.left)*p)-base)/range;
++        }
++        s.value = e.value + (e.endValue - e.value) * eased;
+     } else {
+         s.value = e.value;
+     }
+@@ -234,72 +242,40 @@ BlockArea::Transform BlockArea::transform(float t, float aspect) const {
+     Transform out;
+     out.yScale = 1.0f;
+     if (rpe) {
+-        // RPE canvas (1350x900, origin at center) -> chart space: x in [-1,1],
+-        // y in [-1/aspect, 1/aspect] (both axes are the same length in pixels,
+-        // so 2D rotations are applied in chart space).
+-        const float ux = 2.0f / 1350.0f;                 // px -> chart x
+-        const float uy = 2.0f / (900.0f * aspect);       // px -> chart y
+-        auto toChart = [&](const Vec2& px) { return Vec2(px.x * ux, px.y * uy); };
+-        Vec2 center = toChart(rpeCenterPx);
+-        Vec2 half = Vec2(rpeHalfPx.x * ux, rpeHalfPx.y * uy);
+-
+-        auto applyAnchored = [&](const std::vector<BlockArea::RpeBlockEvent>& tr,
+-                                 int axis /*0 scaleX, 1 scaleY, 2 rotate*/,
+-                                 float fallback, float* outValue) {
+-            RpeSample s = sampleRpeTrack(tr, t, fallback);
+-            if (s.index < 0) { if (outValue) *outValue = fallback; return; }
+-            if (outValue) *outValue = s.value;
+-            // Completed events: full transform from their start to end value.
+-            for (int k = 0; k < s.index; ++k) {
+-                const auto& e = tr[(size_t)k];
+-                Vec2 anchor = toChart(e.anchorPx);
+-                if (axis == 2) {
+-                    float delta = e.endValue - e.value;
+-                    float rad = -delta * PI_OVER_180;
+-                    float cs = std::cos(rad), sn = std::sin(rad);
+-                    Vec2 d = center - anchor;
+-                    center.x = anchor.x + cs * d.x + sn * d.y;
+-                    center.y = anchor.y - sn * d.x + cs * d.y;
+-                } else {
+-                    float ratio = 1.0f;
+-                    if (std::fabs(e.value) > 1e-6f) ratio = e.endValue / e.value;
+-                    Vec2 d = center - anchor;
+-                    if (axis == 0) center.x = anchor.x + ratio * d.x;
+-                    else center.y = anchor.y + ratio * d.y;
++        // Apply anchored history in RPE canvas space, then project Y once.
++        Vec2 center = rpeCenterPx;
++        auto apply = [&](const std::vector<RpeBlockEvent>& track, int axis, float fallback) {
++            auto sample = sampleRpeTrack(track,t,fallback);
++            auto relative = [&](float from,float to,Vec2 anchor) {
++                Vec2 d=center-anchor;
++                if(axis==2){float a=(to-from)*PI_OVER_180,c=std::cos(a),sn=std::sin(a);
++                    center=anchor+Vec2(c*d.x+sn*d.y,-sn*d.x+c*d.y);
++                } else if(std::fabs(from)>1e-12f) {
++                    if(axis==0)center.x=anchor.x+d.x*to/from;
++                    else center.y=anchor.y+d.y*to/from;
+                 }
++            };
++            if(sample.index>=0){
++                for(int k=0;k<sample.index;++k){
++                    const auto& prev=track[k];const auto& next=track[k+1];
++                    relative(prev.transformStart,prev.transformEnd,prev.anchorPx);
++                    relative(prev.transformEnd,next.transformStart,prev.anchorPx);
++                }
++                const auto& e=track[sample.index];
++                relative(e.transformStart,sample.value,e.anchorPx);
+             }
+-            // Current (partial) event.
+-            const auto& e = tr[(size_t)s.index];
+-            Vec2 anchor = toChart(e.anchorPx);
+-            if (axis == 2) {
+-                float delta = s.value - e.value;
+-                float rad = -delta * PI_OVER_180;
+-                float cs = std::cos(rad), sn = std::sin(rad);
+-                Vec2 d = center - anchor;
+-                center.x = anchor.x + cs * d.x + sn * d.y;
+-                center.y = anchor.y - sn * d.x + cs * d.y;
+-            } else {
+-                float ratio = 1.0f;
+-                if (std::fabs(e.value) > 1e-6f) ratio = s.value / e.value;
+-                Vec2 d = center - anchor;
+-                if (axis == 0) center.x = anchor.x + ratio * d.x;
+-                else center.y = anchor.y + ratio * d.y;
+-            }
++            return sample.value;
+         };
+-
+-        float scaleX = 1.0f, scaleY = 1.0f, rotation = 0.0f;
+-        applyAnchored(rpeScaleX, 0, 1.0f, &scaleX);
+-        applyAnchored(rpeScaleY, 1, 1.0f, &scaleY);
+-        applyAnchored(rpeRot, 2, 0.0f, &rotation);
+-
+-        RpeSample mx = sampleRpeTrack(rpeMoveX, t, rpeCenterPx.x);
+-        RpeSample my = sampleRpeTrack(rpeMoveY, t, rpeCenterPx.y);
+-        center.x += (mx.value - rpeCenterPx.x) * ux;
+-        center.y += (my.value - rpeCenterPx.y) * uy;
+-
+-        out.center = center;
+-        out.size = Vec2(std::fabs(half.x * scaleX), std::fabs(half.y * scaleY));
+-        out.rotation = rotation;
++        float sx=apply(rpeScaleX,0,1), sy=apply(rpeScaleY,1,1);
++        float rotation=apply(rpeRot,2,0);
++        center.x += sampleRpeTrack(rpeMoveX,t,rpeCenterPx.x).value-rpeCenterPx.x;
++        center.y += sampleRpeTrack(rpeMoveY,t,rpeCenterPx.y).value-rpeCenterPx.y;
++        const float unit=2.0f/1350.0f;
++        out.center=Vec2(center.x*unit,center.y*unit*1.5f/aspect);
++        // Transform::size is FULL size; RPE rectangle fields above store HALF size.
++        out.size=Vec2(2*std::fabs(rpeHalfPx.x*sx)*unit,2*std::fabs(rpeHalfPx.y*sy)*unit);
++        out.yScale=1.5f/aspect;
++        out.rotation=-rotation;
+         return out;
+     }
+     auto pctToChart = [aspect](const Vec2& p) {
+@@ -555,6 +531,8 @@ bool Chart::loadOfficialJson(const std::string& path, std::string* error) {
+                     note.positionX = jnum(e, "positionX", 0);
+                     note.holdTime = jnum(e, "holdTime", 0);
+                     note.speed = jnum(e, "speed", 1.0f);
++                    note.officialHold = note.type == 3;
++                    note.officialHoldSpeed = note.speed;
+                     note.floorPosition = jnum(e, "floorPosition", 0.0f);
+                     note.above = above;
+                     note.secTime = line.beat2sec(note.time, offset);
+diff --git a/src/chart.h b/src/chart.h
+index bc8bca3..0d62c77 100644
+--- a/src/chart.h
++++ b/src/chart.h
+@@ -38,8 +38,16 @@ struct Note {
+     float holdTime = 0.0f;     // beats
+     float speed = 1.0f;
+     float floorPosition = 0.0f;
++    bool officialHold = false;
++    float officialHoldSpeed = 1.0f;
++    // Body distance in screen-height units, excluding head and tail artwork.
++    // It is independent of judge-line scroll speed and shrinks by elapsed time.
++    float officialHoldBody(float now) const {
++        return std::max(0.0f, secHoldEndTime - std::max(now, secTime)) * officialHoldSpeed * PGRH;
++    }
+     bool above = true;
+     float secTime = 0.0f;      // seconds
++    std::vector<float> holdEffectTimes; // half-beat ticks for RPE tempo changes
+     float secHoldEndTime = 0.0f;
+     float size = 1.0f;         // note width multiplier (RPE "size", 1 = default)
+     float alpha = 1.0f;        // per-note opacity (RPE alpha / 255)
+@@ -51,7 +59,7 @@ struct Note {
+ // over [t0, t1] (seconds) with RPE easing id `ease`, then holds until the next
+ // segment starts.
+ struct ValueSegment {
+-    float t0 = 0.0f, t1 = 0.0f;
++    double t0 = 0.0, t1 = 0.0;
+     float v0 = 0.0f, v1 = 0.0f;
+     int ease = 1;
+ };
+@@ -128,6 +136,10 @@ struct BlockArea {
+         float value = 0.0f, endValue = 0.0f;
+         int ease = 1;
+         Vec2 anchorPx = Vec2(0, 0);
++        float transformStart = 0, transformEnd = 0;
++        bool transformStep = false, bezier = false;
++        float left = 0, right = 1;
++        float points[4] = {0,0,1,1};
+     };
+     bool rpe = false;
+     Vec2 rpeCenterPx = Vec2(0, 0);
+diff --git a/src/framesink.cpp b/src/framesink.cpp
+index 527fe58..35d0976 100644
+--- a/src/framesink.cpp
++++ b/src/framesink.cpp
+@@ -313,12 +313,16 @@ bool FrameSink::start(const Options& opt, std::string* err) {
+                           " -r " + std::to_string(opt.fps) + " -i - -an";
+         // The renderer already delivers the YUV planes top-down; only the RGBA
+         // path needs ffmpeg to flip the GL-style bottom-up image.
+-        if (!yuv) cmd += " -vf vflip";
+-        cmd += " -c:v libx264 -preset " + opt.preset + " -crf " + std::to_string(opt.crf);
+-        // rc-lookahead=10 keeps x264's frame queue small; sync-lookahead=0 stops
+-        // it from waiting on threads that no longer exist per segment.
+-        cmd += " -threads " + std::to_string(threadsPerSeg) +
+-               " -x264-params rc-lookahead=10:sync-lookahead=0 -pix_fmt yuv420p";
++        std::string filter = yuv ? "" : "vflip";
++        if(opt.outputWidth>0 && opt.outputHeight>0 && (opt.outputWidth!=opt.width||opt.outputHeight!=opt.height)){
++            if(!filter.empty())filter+=",";
++            filter+="scale="+std::to_string(opt.outputWidth)+":"+std::to_string(opt.outputHeight)+":flags=lanczos";
++        }
++        if(!filter.empty())cmd+=" -vf "+filter;
++        if(opt.nvenc) cmd+=" -c:v h264_nvenc -preset p4 -tune hq -rc vbr -cq 19 -b:v 0";
++        else cmd+=" -c:v libx264 -preset "+opt.preset+" -crf "+std::to_string(opt.crf)+
++            " -threads "+std::to_string(threadsPerSeg)+" -x264-params rc-lookahead=10:sync-lookahead=0";
++        cmd+=" -pix_fmt yuv420p";
+         // ffmpeg reports failures on stderr, which the data pipe cannot carry:
+         // keep it in a side log so a dead encoder explains itself.
+         e->logPath = e->path + ".log";
+diff --git a/src/framesink.h b/src/framesink.h
+index f3f1169..ea00cac 100644
+--- a/src/framesink.h
++++ b/src/framesink.h
+@@ -23,6 +23,8 @@ struct Options {
+     int fps = 60;
+     std::string preset = "medium";
+     int crf = 18;
++    bool nvenc = false;
++    int outputWidth = 0, outputHeight = 0;
+     // Raw frame layout on the pipe: "rgba" (bottom-up, ffmpeg flips it) or
+     // "yuv420p" (top-down planes produced by the renderer, no filter needed).
+     std::string pipeFormat = "nv12";
+diff --git a/src/main.cpp b/src/main.cpp
+index 2cdb0f1..51e317d 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -36,6 +36,8 @@ struct Args {
+     std::string video;    // when set, encode an MP4 with ffmpeg
+     std::string audio;    // optional audio track for the video
+     std::string preset = "medium";
++    bool nvenc = false, noAudio = false;
++    int outputWidth=0, outputHeight=0;
+     int crf = 18;
+     bool version = false;  // --version: print and exit without touching GL
+     int encoders = 0;  // parallel ffmpeg processes for --video (0 = pick from the machine)
+@@ -52,6 +54,9 @@ struct Args {
+     int width = 1920;
+     int height = 1080;
+     bool noLines = false, noNotes = false, noNoise = false;
++    bool hud = false;
++    std::string hudFont, hudFontFamily = "Saira";
++    std::string infoFont, infoFontFamily = "Saira";
+     bool noHits = false;
+     float musicVolume = 1.0f;
+     float notesVolume = 0.5f;
+@@ -99,6 +104,11 @@ void usage() {
+         "  --mh-hint <0|1|2>     multi-press hint art: 0 chart, 1 always, 2 never\n"
+         "  --mirror              mirror the chart left/right\n"
+         "  --line-color <c>      judge line colour: gold (default) or white\n"
++        "  --hud                 draw pause, score, autoplay combo, song and level\n"
++        "  --hud-font <ttf>      optional gameplay HUD font file\n"
++        "  --hud-font-family <n> gameplay font family (default Saira)\n"
++        "  --info-font <ttf>     optional song-info font file\n"
++        "  --info-font-family <n> song-info font family (default Saira)\n"
+         "  --fx-scale <x>        hit-effect size multiplier over note size (1.0)\n"
+         "  --debug-noise <pfx>   dump noise render targets as <pfx>*.png\n"
+         "  --no-lines --no-notes --no-noise   hide layers (debug)\n"
+@@ -122,6 +132,10 @@ bool parseArgs(int argc, char** argv, Args& a) {
+         else if (s == "--out") { if (!next(a.out)) return false; }
+         else if (s == "--outdir") { if (!next(a.outDir)) return false; }
+         else if (s == "--video") { if (!next(a.video)) return false; }
++        else if (s == "--no-audio") { a.noAudio=true; }
++        else if (s == "--nvenc") { a.nvenc=true; }
++        else if (s == "--output-w") { if(i+1>=argc)return false; a.outputWidth=atoi(argv[++i]); }
++        else if (s == "--output-h") { if(i+1>=argc)return false; a.outputHeight=atoi(argv[++i]); }
+         else if (s == "--audio") { if (!next(a.audio)) return false; }
+         else if (s == "--mix-audio") { if (!next(a.mixAudio)) return false; }
+         else if (s == "--no-hits") { a.noHits = true; }
+@@ -172,6 +186,11 @@ bool parseArgs(int argc, char** argv, Args& a) {
+         else if (s == "--no-lines") { a.noLines = true; }
+         else if (s == "--no-notes") { a.noNotes = true; }
+         else if (s == "--no-noise") { a.noNoise = true; }
++        else if (s == "--hud") { a.hud = true; }
++        else if (s == "--hud-font") { if (!next(a.hudFont)) return false; }
++        else if (s == "--hud-font-family") { if (!next(a.hudFontFamily)) return false; }
++        else if (s == "--info-font") { if (!next(a.infoFont)) return false; }
++        else if (s == "--info-font-family") { if (!next(a.infoFontFamily)) return false; }
+         else if (s == "--bench") { if (i + 1 >= argc) return false; a.bench = atoi(argv[++i]); }
+         else if (s == "-h" || s == "--help") { usage(); return false; }
+         else {
+@@ -253,6 +272,7 @@ bool renderVideo(Renderer& renderer, const Args& a) {
+     // Resolve the music track: explicit --audio wins, otherwise look next to the chart.
+     std::string music = a.audio;
+     if (music.empty()) music = autoMusicPath(a.chart);
++    if(a.noAudio)music.clear();
+     std::string audioPath = music;
+     std::string mixedPath;
+     // RAII: the mixed wav is a temp file and must vanish on every exit path,
+@@ -295,6 +315,8 @@ bool renderVideo(Renderer& renderer, const Args& a) {
+     so.height = a.height;
+     so.fps = a.fps;
+     so.preset = a.preset;
++    so.nvenc = a.nvenc;
++    so.outputWidth=a.outputWidth;so.outputHeight=a.outputHeight;
+     so.crf = a.crf;
+     so.totalFrames = totalFrames;
+     so.segments = a.encoders;
+@@ -370,6 +392,7 @@ bool renderVideo(Renderer& renderer, const Args& a) {
+                 double sec = std::chrono::duration<double>(tNow - tStart).count();
+                 std::printf("  frame %lld/%d t=%.2f (%.1f fps wall)\n", done, totalFrames, t,
+                             done / (sec > 1e-6 ? sec : 1e-6));
++                std::fflush(stdout);
+             }
+         }
+     }
+@@ -504,6 +527,14 @@ int runMain(int argc, char** argv) {
+         std::fprintf(stderr, "chart addons: %s\n", err.c_str());
+     }
+     renderer.setHideLayers(args.noLines, args.noNotes, args.noNoise);
++    renderer.setHudEnabled(args.hud);
++    if (args.hud) {
++        const std::string hudFont = args.hudFont.empty() ? args.assets + "/hud/saira-regular.ttf"
++                                                         : args.hudFont;
++        const std::string infoFont = args.infoFont.empty() ? args.assets + "/hud/saira-regular.ttf"
++                                                           : args.infoFont;
++        renderer.setHudFonts(hudFont, args.hudFontFamily, infoFont, args.infoFontFamily);
++    }
+     std::printf("chart: %d lines, %d blocks, %d notes\n", (int)renderer.chart().lines.size(),
+                 (int)renderer.chart().blocks.size(), renderer.chart().noteCount);
+ 
+diff --git a/src/noise.cpp b/src/noise.cpp
+index 02121c0..70d8570 100644
+--- a/src/noise.cpp
++++ b/src/noise.cpp
+@@ -242,12 +242,16 @@ bool NoiseField::makeTargets(std::string* error) {
+     t_.maskA.create(mw_, mh_, GL_RGBA8, false);
+     t_.maskNA.create(mw_, mh_, GL_RGBA8, false);
+     t_.maskR.create(mw_, mh_, GL_RGBA8, false);
+-    t_.activeCompose.create(mw_, mh_, GL_R8, true);
+-    t_.disabledCompose.create(mw_, mh_, GL_RG8, true);
++    // Match NoiseField/config.json and RPEN Skin::target: unspecified filter
++    // means nearest. Interpolating compose before edge dilation softens the
++    // discrete contour irreversibly. Only effects explicitly requests linear
++    // (its red edge is sampled at texel centers, green glow stays smooth).
++    t_.activeCompose.create(mw_, mh_, GL_R8, false);
++    t_.disabledCompose.create(mw_, mh_, GL_RG8, false);
+     t_.effects.create(ew, eh, GL_RG8, true);
+-    t_.pingA.create(ew, eh, GL_RG8, true);
+-    t_.pingB.create(ew, eh, GL_RG8, true);
+-    t_.sceneColor.create(sw, shh, GL_RGBA8, true);
++    t_.pingA.create(ew, eh, GL_RG8, false);
++    t_.pingB.create(ew, eh, GL_RG8, false);
++    t_.sceneColor.create(sw, shh, GL_RGBA8, false);
+     t_.flash.create(mw_, mh_, GL_R8, false);
+     t_.blockMask.create(mw_, mh_, GL_R8, false);
+     t_.screen.create(w_, h_, GL_RGBA8, true);
+diff --git a/src/renderer.cpp b/src/renderer.cpp
+index f5805b7..62eaefa 100644
+--- a/src/renderer.cpp
++++ b/src/renderer.cpp
+@@ -1,5 +1,7 @@
++#include <stdexcept>
+ // renderer.cpp - Phigros chart scene renderer.
+ #include "renderer.h"
++#include "hitfx.h"
+ 
+ #include "jsonarena.h"
+ #include <cstdio>
+@@ -356,6 +358,10 @@ bool Renderer::resize(int w, int h, std::string* error) {
+     } else if (!noise_.resize(w, h, aspect_, error)) {
+         return false;
+     }
++    if (hudEnabled_) {
++        if (!hud_.resize(w, h, error)) return false;
++        sprites_[TEX_HUD].tex.create(w, h, GL_RGBA8, nullptr, GL_RGBA, GL_UNSIGNED_BYTE, true, false);
++    }
+     buildHitEffects();
+     buildNoteTimes();
+     ready_ = true;
+@@ -516,6 +522,7 @@ int Renderer::loadChartAddons(const std::string& chartPath, std::string* error)
+ 
+ void Renderer::destroy() {
+     ready_ = false;
++    hud_.destroy();
+     scene_.destroy();
+     yuvY_.destroy();
+     yuvUV_.destroy();
+@@ -792,25 +799,14 @@ void Renderer::drawHoldNotes(float time) {
+                 if (!hideNoteRanges_.empty() && inAnyRange(hideNoteRanges_, note.secTime)) continue;
+                 if (note.secHoldEndTime <= time) continue;
+ 
+-                // Distances are measured from the judge line along the note's
+-                // "away from the line" axis, exactly like prpr/core/note.rs:
+-                // the head cap leads (near the line), the tail cap trails.
+-                // Official holds always scroll at visual speed 1.0 (prpr parse/pgr.rs
+-                // forces hold speed to 1.0, only flow_speed scales it).
+-                // Holds carry their own speed multiplier, exactly like taps: it
+-                // scales both how fast the bar travels and how long it is.
+-                float headDist = (note.floorPosition - ls.fp) * PGRH * (float)h_ * view_.flowSpeed;
++                // Native official holds have independent head scrolling and
++                // duration-based body length. Pure RPE holds retain integral tails.
++                float travelSpeed = line.rpe && !note.officialHold ? note.speed : 1.0f;
++                float headDist = (note.floorPosition - ls.fp) * PGRH * h_ * view_.flowSpeed * travelSpeed;
+                 float beatEnd = line.sec2beat(note.secHoldEndTime, chart_.offset);
+-                float endDist = (line.fpAt(beatEnd) - ls.fp) * PGRH * (float)h_ * view_.flowSpeed;
+-                // Bar length = (P_tail - P_head) * PGRH * H, i.e. the integral of
+-                // the line speed over the hold's own beat span (Lchzh docs,
+-                // "相关计算": P_J(t) = p_k + v_k (t - t_k) / (1.875 / BPM)).  It is
+-                // a rigid bar: both caps ride the same speed curve, so the length
+-                // is constant while it approaches and scales with the chart's
+-                // speed events and with --flow-speed.  Using the instantaneous
+-                // speed instead makes short holds inside a speed burst collapse:
+-                // at 1:57 the 9 ms holds there are 118 px long by the integral
+-                // but only 15 px if the current speed is sampled.
++                float endDist = note.officialHold
++                    ? (note.secTime <= time ? 0.0f : headDist) + note.officialHoldBody(time) * h_ * view_.flowSpeed
++                    : (line.fpAt(beatEnd) - ls.fp) * PGRH * h_ * view_.flowSpeed * travelSpeed;
+                 bool clicked = note.secTime <= time;
+                 if (headDist > viewFp && endDist > viewFp) continue;
+ 
+@@ -1027,9 +1023,53 @@ void Renderer::render(float time) {
+         }
+         for (auto& a : addons_) a.apply(scene_, ctx);
+     }
++    drawHud(time);
+     ++frameIndex_;
+ }
+ 
++void Renderer::drawHud(float time) {
++    if (!hudEnabled_ || w_ <= 0 || h_ <= 0) return;
++    if (sprites_[TEX_HUD].tex.width != w_ || sprites_[TEX_HUD].tex.height != h_) {
++        std::string error;
++        if (!hud_.resize(w_, h_, &error)) {
++            std::fprintf(stderr, "HUD: %s\n", error.c_str());
++            throw std::runtime_error("HUD initialization failed: " + error);
++        }
++        sprites_[TEX_HUD].tex.create(w_, h_, GL_RGBA8, nullptr, GL_RGBA, GL_UNSIGNED_BYTE, true,
++                                     false);
++    }
++
++    // Absolute timestamp counting keeps still previews, seeks and split exports
++    // consistent with continuous video (including completed hold tails).
++    auto it = std::upper_bound(noteHits_.begin(), noteHits_.end(), time,
++        [](float t, const NoteHit& hit) { return t < hit.time; });
++    int combo = int(it - noteHits_.begin());
++    const unsigned int score = noteHits_.empty()
++                                   ? 0u
++                                   : (unsigned int)std::lround(1000000.0 * (double)combo /
++                                                               (double)noteHits_.size());
++    std::string error;
++    if (!hud_.render(chart_, combo, score, &error)) {
++        std::fprintf(stderr, "HUD: %s\n", error.c_str());
++        hudEnabled_ = false;
++        return;
++    }
++
++    glBindTexture(GL_TEXTURE_2D, sprites_[TEX_HUD].tex.id);
++    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
++    const auto& pixels = hud_.pixels();
++    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w_, h_, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
++    glBindTexture(GL_TEXTURE_2D, 0);
++
++    scene_.bind();
++    glEnable(GL_BLEND);
++    gpu::setBlendAlpha();
++    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
++    pushSprite(TEX_HUD, gpu::makeSprite(Vec2(w_ * 0.5f, h_ * 0.5f), (float)w_, (float)h_, 0.0f,
++                                        Vec2(0, 0), Vec2(1, 1), Vec4(1, 1, 1, 1)));
++    flush(TEX_HUD, false);
++}
++
+ bool Renderer::readPixelsRaw(std::vector<unsigned char>& rgba) const {
+     if (!ready_) return false;
+     rgba.resize((size_t)w_ * (size_t)h_ * 4);
+@@ -1172,13 +1212,15 @@ void Renderer::buildNoteTimes() {
+         for (int side = 0; side < 2; ++side) {
+             const auto& list = side == 0 ? line.notesAbove : line.notesBelow;
+             for (const auto& n : list) {
++                if (n.isFake) continue;
+                 LineState ls;
+                 buildLineState(line, n.secTime, ls);
+                 const float posX = n.positionX * PGRW * (float)w_;
+                 const float ox = ls.cx + posX * ls.cosR;
+                 const float oy = ls.cy - posX * ls.sinR;
+                 NoteHit h;
+-                h.time = n.secTime;
++                // Phigros/Phira counts a Hold when its tail is completed.
++                h.time = n.type == 3 ? n.secHoldEndTime : n.secTime;
+                 h.x = w_ > 0 ? (ox / (float)w_) * 2.0f - 1.0f : 0.0f;
+                 h.y = h_ > 0 ? 1.0f - (oy / (float)h_) * 2.0f : 0.0f;
+                 noteHits_.push_back(h);
+@@ -1191,117 +1233,73 @@ void Renderer::buildNoteTimes() {
+ 
+ void Renderer::buildHitEffects() {
+     hitEffects_.clear();
+-    const float W = (float)w_, H = (float)h_;
+-    // Official Phigros re-emits a full hit effect every 0.15 s while a hold is
+-    // being held (prpr/core/note.rs HOLD_PARTICLE_INTERVAL).
+-    const float kHoldInterval = 0.15f;
+-    for (auto& line : chart_.lines) {
+-        auto compute = [&](const Note& n, bool above, float hit) {
+-            HitEffect e;
+-            e.time = hit;
+-            float beat = line.sec2beat(hit, chart_.offset);
+-            float cx = line.moveX(beat) * W;
+-            float cy = (1.0f - line.moveY(beat)) * H;
+-            float rotDeg = line.rotate(beat);
+-            if (view_.mirror) { cx = W - cx; rotDeg = -rotDeg; }
+-            float rad = rotDeg * PI_OVER_180;
+-            float cs = std::cos(rad), sn = std::sin(rad);
+-            float posX = n.positionX * PGRW * W * (view_.mirror ? -1.0f : 1.0f);
+-            e.pos = Vec2(cx + posX * cs, cy - posX * sn);
+-            e.rot = (rotDeg - (above ? 0.0f : 180.0f)) * PI_OVER_180;
+-            e.size = n.size;
+-            e.type = n.type;
+-            return e;
+-        };
+-        auto add = [&](const Note& n, bool above) {
+-            if (n.secTime < 0.0f) return;
+-            if (!hideNoteRanges_.empty() && inAnyRange(hideNoteRanges_, n.secTime)) return;
+-            if (n.type == 3) {
+-                // A hold always shows a hit effect on its first hit, before the
+-                // steady 0.15 s re-emission starts.  The re-emissions only keep
+-                // the sparks alive: drawing the full ring every 0.15 s stacks a
+-                // dozen outlines on screen and the game does not look like that.
+-                hitEffects_.push_back(compute(n, above, n.secTime));
+-                for (float t = n.secTime + kHoldInterval; t < n.secHoldEndTime - 1e-4f;
+-                     t += kHoldInterval) {
+-                    HitEffect e = compute(n, above, t);
+-                    e.repeat = true;
+-                    hitEffects_.push_back(e);
+-                }
+-            } else {
+-                hitEffects_.push_back(compute(n, above, n.secTime));
++    uint32_t randomIndex=0;
++    const float W=float(w_),H=float(h_);
++    for(const auto& line:chart_.lines){
++        std::vector<const Note*> notes;
++        for(const auto& n:line.notesAbove)notes.push_back(&n);
++        for(const auto& n:line.notesBelow)notes.push_back(&n);
++        std::stable_sort(notes.begin(),notes.end(),[](const Note* a,const Note* b){return a->secTime<b->secTime;});
++        auto emit=[&](const Note& n,float t){
++            HitEffect e;e.time=t;e.size=n.size;e.type=n.type;
++            LineState ls;buildLineState(line,t,ls);
++            float x=n.positionX*PGRW*W*(view_.mirror?-1.f:1.f);
++            e.pos=Vec2(ls.cx+x*ls.cosR,ls.cy-x*ls.sinR);
++            // PhiVideo's flash is screen aligned, independent of line rotation.
++            e.rot=0;
++            for(auto& par:e.particles){
++                par.x=hitfx::random(0,360,randomIndex++)*PI_OVER_180;
++                par.y=hitfx::random(185,265,randomIndex++);
+             }
++            hitEffects_.push_back(e);
+         };
+-        for (auto& n : line.notesAbove) add(n, true);
+-        for (auto& n : line.notesBelow) add(n, false);
++        for(const Note* ptr:notes){const auto& n=*ptr;
++            if(n.isFake||n.secTime<0||(!hideNoteRanges_.empty()&&inAnyRange(hideNoteRanges_,n.secTime)))continue;
++            emit(n,n.secTime);
++            // PhiVideo also creates a clickCollection particle set (not drawn
++            // here). Advance the seed sequence to preserve the effect stream.
++            randomIndex+=8;
++            if(n.type==3){
++                if(line.rpe){for(float t:n.holdEffectTimes)emit(n,t);}
++                else {for(float beat=n.time;beat<n.time+n.holdTime;beat+=16.f)
++                    emit(n,line.beat2sec(beat,chart_.offset));}
++                // The original source emits both the initial hit and the
++                // first hold tick at the head. Retain that behavior explicitly.
++            }
++        }
+     }
+-    std::sort(hitEffects_.begin(), hitEffects_.end(),
+-              [](const HitEffect& a, const HitEffect& b) { return a.time < b.time; });
++    std::stable_sort(hitEffects_.begin(),hitEffects_.end(),[](const HitEffect&a,const HitEffect&b){return a.time<b.time;});
+ }
+ 
+-
+ void Renderer::drawEffects(float time) {
+-    if (hitEffects_.empty()) return;
+-    const float kDur = 0.5f;
+-    auto lo = std::lower_bound(hitEffects_.begin(), hitEffects_.end(), time - kDur,
+-                               [](const HitEffect& e, float v) { return e.time < v; });
+-    // The flash is sized off the note it belongs to: the HitFx atlas frame is
+-    // 365 px with the largest alpha bbox at 349 px (0.956 of the frame), so a
+-    // frame width of note_width / 0.956 makes the visible flash exactly as wide
+-    // as the note art.  Particles use the official 1/11 of the note width.
+-    const float noteW = NOTE_SIZE * (float)w_;
+-    const float fx = view_.fxScale;
+-    const float effBase = noteW * 2.0f * packInfo_.hitFxScale * fx;
+-    const float parBase = noteW * (1.0f / 11.0f) * packInfo_.hitFxScale * fx;
+-    const float unit = (float)w_ * 0.5f;
+-    const float parSpeed = 2.5f * unit;      // chart units per second
+-    const float parAccel = -6.0f * unit;     // chart units per second^2
+-    // Hit effects are always the official gold, whatever --line-color says: only
+-    // the judgement line itself follows that switch.
+-    const Vec4 pcolor(1.0f, 236.0f / 255.0f, 159.0f / 255.0f, 1.0f);
+-    const int frames = packInfo_.hitFxCols * packInfo_.hitFxRows;
+-    const int cols = packInfo_.hitFxCols;
+-    for (auto it = lo; it != hitEffects_.end() && it->time <= time; ++it) {
+-        const float p = (time - it->time) / kDur;
+-        if (p < 0.0f || p >= 1.0f) continue;
+-        // Official particle colour curve: a = 1 -> 0.7 (mid) -> 0 (end).
+-        // Bright burst that dies out quickly: the late atlas frames are outline
+-        // art, so a slow linear fade leaves a grey square sitting around the note.
+-        const float curveA = p < 0.5f ? (1.0f - 0.6f * p)
+-                                      : 0.7f * ((1.0f - p) / 0.5f) * ((1.0f - p) / 0.5f);
+-        const float effW = effBase * it->size;
+-        const float parSize = parBase * it->size;
+-        int idx = (int)(p * (float)frames);
+-        if (idx >= frames) idx = frames - 1;
+-        const int col = idx % cols, row = idx / cols;
+-        const Vec2 uvMin((float)col / (float)cols, (float)row / (float)packInfo_.hitFxRows);
+-        const Vec2 uvMax((float)(col + 1) / (float)cols, (float)(row + 1) / (float)packInfo_.hitFxRows);
+-        // The flash is tinted by the judgement line colour (official hit_fx_tinted).
+-        // Additive over an already bright backdrop: full strength whites out dense
+-        // sections, the game's burst reads much lighter than that.
+-        const float ringA = curveA * 0.65f * (it->repeat ? 0.22f : 1.0f);
+-        pushSprite(TEX_HITFX,
+-                   gpu::makeSprite(it->pos, effW, effW, it->rot, uvMin, uvMax,
+-                                   Vec4(pcolor.x, pcolor.y, pcolor.z, ringA)));
+-        uint32_t seed = (uint32_t)(it->time * 977.0f) * 31u + 12345u;
+-        auto rnd = [&seed]() {
+-            seed ^= seed << 13;
+-            seed ^= seed >> 17;
+-            seed ^= seed << 5;
+-            return (float)(seed & 0xFFFFFFu) / 16777216.0f;
+-        };
+-        for (int k = 0; k < 4; ++k) {
+-            const float ang = rnd() * 6.28318530718f;
+-            const float speed = parSpeed * (0.9f + 0.2f * rnd());  // +-10% velocity
+-            const float t = p * kDur;
+-            float dist = speed * t + 0.5f * parAccel * t * t;       // decelerating squares
+-            if (dist < 0.0f) dist = 0.0f;
+-            const float size = parSize * (0.85f + 0.3f * rnd());
+-            const Vec2 pc(it->pos.x + std::cos(ang) * dist, it->pos.y + std::sin(ang) * dist);
+-            pushSprite(TEX_WHITE, gpu::makeSprite(pc, size, size, ang, Vec2(0, 0), Vec2(1, 1),
+-                                                  Vec4(pcolor.x, pcolor.y, pcolor.z, curveA)));
++    if(hitEffects_.empty())return;
++    auto lo=std::lower_bound(hitEffects_.begin(),hitEffects_.end(),time-hitfx::duration,
++        [](const HitEffect&e,float t){return e.time<t;});
++    const int cols=packInfo_.hitFxCols,rows=packInfo_.hitFxRows,count=cols*rows;
++    const float frameW=float(sprites_[TEX_HITFX].tex.width)/cols;
++    const float frameH=float(sprites_[TEX_HITFX].tex.height)/rows;
++    const float scale=packInfo_.hitFxScale*view_.fxScale;
++    const Vec4 gold(1,236.f/255,159.f/255,1);
++    for(auto it=lo;it!=hitEffects_.end()&&it->time<=time;++it){
++        float age=time-it->time;
++        if(age<0||age>=hitfx::duration)continue;
++        float progress=hitfx::progress(age);
++        int index=hitfx::frame(age,count),col=index%cols,row=index/cols;
++        float width=hitfx::width(NOTE_SIZE*w_)*it->size*scale;
++        Vec2 uv0(float(col)/cols,float(row)/rows),uv1(float(col+1)/cols,float(row+1)/rows);
++        // Normal source-over blending, texture RGB and its baked alpha. There
++        // is no additional fade, rotation or additive ring in PhiVideo.
++        pushSprite(TEX_HITFX,gpu::makeSprite(it->pos,width,width*frameH/frameW,0,uv0,uv1,gold));
++        flush(TEX_HITFX,false);
++        float pixelScale=hitfx::particleScale(float(w_))*scale*it->size;
++        float particleSize=33.f*.75f*pixelScale;
++        for(const auto& par:it->particles){
++            float distance=par.y*pixelScale*hitfx::particleTravel(progress);
++            Vec2 center(it->pos.x+std::cos(par.x)*distance,it->pos.y+std::sin(par.x)*distance);
++            pushSprite(TEX_WHITE,gpu::makeSprite(center,particleSize,particleSize,0,Vec2(0,0),Vec2(1,1),
++                Vec4(gold.x,gold.y,gold.z,1-progress)));
+         }
++        // Preserve event order: each flash is followed by its own particles.
++        flush(TEX_WHITE,false);
+     }
+-    flush(TEX_HITFX, true);
+-    flush(TEX_WHITE, false);
+ }
+diff --git a/src/renderer.h b/src/renderer.h
+index c86819b..08ad5e9 100644
+--- a/src/renderer.h
++++ b/src/renderer.h
+@@ -9,6 +9,7 @@
+ #include "addon.h"
+ #include "chart.h"
+ #include "gpu.h"
++#include "hud.h"
+ #include "noise.h"
+ 
+ #include <array>
+@@ -53,6 +54,7 @@ public:
+         TEX_HOLD_TAIL_B,
+         TEX_HITFX,
+         TEX_LINE,
++        TEX_HUD,
+         TEX_COUNT
+     };
+ 
+@@ -102,6 +104,11 @@ public:
+         bool whiteLine = false;    // judge line + hit-fx colour: gold (default) or white
+     };
+     void setFrameRate(float fps) { frameRate_ = fps; }
++    void setHudEnabled(bool enabled) { hudEnabled_ = enabled; }
++    void setHudFonts(const std::string& gameplayPath, const std::string& gameplayFamily,
++                     const std::string& infoPath, const std::string& infoFamily) {
++        hud_.setFonts(gameplayPath, gameplayFamily, infoPath, infoFamily);
++    }
+     ViewSettings& viewSettings() { return view_; }
+     const ViewSettings& viewSettings() const { return view_; }
+ 
+@@ -133,7 +140,7 @@ public:
+         float rot = 0.0f;
+         float size = 1.0f;  // note.size: the flash is scaled to the note it hits
+         int type = 1;       // note type: taps/flicks flash white, drags/holds gold
+-        bool repeat = false;  // hold re-emission: sparks keep going, the ring does not
++        std::array<Vec2,4> particles; // angle (radians), radius (reference pixels)
+     };
+     float duration() const { return duration_; }
+ 
+@@ -153,6 +160,7 @@ private:
+     gpu::RenderTarget scene_;
+     Chart chart_;
+     noise::NoiseField noise_;
++    hud::Overlay hud_;
+ 
+     int w_ = 0, h_ = 0;
+     static const int kReadbackSlots = 4;
+@@ -181,6 +189,7 @@ private:
+     int zoneCount_ = 0;
+     float duration_ = 0.0f;
+     bool hideLines_ = false, hideNotes_ = false, hideNoise_ = false;
++    bool hudEnabled_ = false;
+     std::vector<addon::Addon> addons_;
+     int frameIndex_ = 0;
+     ViewSettings view_;
+@@ -207,6 +216,7 @@ private:
+     void drawHoldNotes(float time);
+     void drawTapNotes(float time);
+     void drawEffects(float time);
++    void drawHud(float time);
+     void buildHitEffects();
+     void buildNoteTimes();
+     void loadDuration(const std::string& chartPath);
+diff --git a/src/rpe.cpp b/src/rpe.cpp
+index 8347a26..9b7f625 100644
+--- a/src/rpe.cpp
++++ b/src/rpe.cpp
+@@ -5,6 +5,7 @@
+ #include <cstdio>
+ #include <cstring>
+ #include <string>
++#include <stdexcept>
+ #include <vector>
+ 
+ #include "../third_party/cJSON.h"
+@@ -50,24 +51,24 @@ const cJSON* obj(const cJSON* parent, const char* key) {
+ }
+ 
+ // RPE beat triple [int, numerator, denominator] -> beat number.
+-float readBeat(const cJSON* v, float fallback = 0.0f) {
++double readBeat(const cJSON* v, float fallback = 0.0f) {
+     if (!v) return fallback;
+-    if (cJSON_IsNumber(v)) return (float)v->valuedouble;
++    if (cJSON_IsNumber(v)) return v->valuedouble;
+     if (!cJSON_IsArray(v)) return fallback;
+     const cJSON* a = cJSON_GetArrayItem(v, 0);
+     const cJSON* b = cJSON_GetArrayItem(v, 1);
+     const cJSON* d = cJSON_GetArrayItem(v, 2);
+-    float den = numOf(d, 1.0f);
++    double den = d ? d->valuedouble : 1.0;
+     if (std::fabs(den) < 1e-6f) den = 1.0f;
+-    return numOf(a, 0.0f) + numOf(b, 0.0f) / den;
++    return (a ? a->valuedouble : 0.) + (b ? b->valuedouble : 0.) / den;
+ }
+ 
+ // Tempo map: sorted (beat, bpm, seconds at that beat).
+ struct Tempo {
+     struct Entry {
+-        float beat = 0.0f;
++        double beat = 0.0;
+         float bpm = 120.0f;
+-        float sec = 0.0f;
++        double sec = 0.0;
+     };
+     std::vector<Entry> entries;
+ 
+@@ -90,8 +91,8 @@ struct Tempo {
+         std::sort(entries.begin(), entries.end(),
+                   [](const Entry& a, const Entry& b) { return a.beat < b.beat; });
+         // Compute absolute seconds for each keyframe.
+-        float sec = 0.0f;
+-        float lastBeat = entries[0].beat;
++        double sec = 0.0;
++        double lastBeat = entries[0].beat;
+         float lastBpm = entries[0].bpm;
+         entries[0].sec = 0.0f;
+         for (size_t i = 1; i < entries.size(); ++i) {
+@@ -102,7 +103,7 @@ struct Tempo {
+         }
+     }
+ 
+-    float secOf(float beat) const {
++    double secOf(double beat) const {
+         size_t i = 0;
+         for (size_t k = 0; k < entries.size(); ++k) {
+             if (entries[k].beat <= beat + 1e-6f) i = k;
+@@ -133,10 +134,10 @@ struct MapCtx {
+ 
+ bool readSegment(const cJSON* e, const Tempo& tempo, float factor, float (*mapValue)(float),
+                  ValueSegment* out, std::string* error) {
+-    float b0 = readBeat(obj(e, "startTime"));
+-    float b1 = readBeat(obj(e, "endTime"), b0);
+-    float t0 = tempo.secOf(b0) * factor;
+-    float t1 = tempo.secOf(b1) * factor;
++    double b0 = readBeat(obj(e, "startTime"));
++    double b1 = readBeat(obj(e, "endTime"), b0);
++    double t0 = tempo.secOf(b0) * factor;
++    double t1 = tempo.secOf(b1) * factor;
+     if (t1 < t0) std::swap(t0, t1);
+     int ease = (int)numOf(obj(e, "easingType"), 1.0f);
+     float left = numOf(obj(e, "easingLeft"), 0.0f);
+@@ -217,9 +218,10 @@ void readLayers(const cJSON* line, const Tempo& tempo, float factor, JudgeLine&
+         s.v1 = std::max(0.0f, std::min(1.0f, s.v1 / 255.0f));
+     }
+     for (auto& s : speed) {
+-        s.v0 /= 10.0f;  // RPE editor exposes 10x speed as neutral
+-        s.v1 /= 10.0f;
++        s.v0 /= 4.5f;  // Official -> RPE uses speed * 4.5; undo that unit conversion.
++        s.v1 /= 4.5f;
+     }
++    for (auto& s : rot) { s.v0 = -s.v0; s.v1 = -s.v1; }
+     out.rpe = true;
+     out.bpm = PGRBEAT;  // one beat == one second for the baked timeline
+     out.rpeX = std::move(mx);
+@@ -235,12 +237,21 @@ void readNotes(const cJSON* line, const Tempo& tempo, JudgeLine& out) {
+     int n = cJSON_GetArraySize(notes);
+     for (const cJSON* jn = notes->child; jn; jn = jn->next) {
+         Note note;
+-        note.type = (int)numOf(obj(jn, "type"), 1.0f);
++        const int rpeType = (int)numOf(obj(jn, "type"), 1.0f);
++        // Internal renderer order follows official charts (1=Tap, 2=Drag,
++        // 3=Hold, 4=Flick). RPE stores (1=Tap, 2=Hold, 3=Flick, 4=Drag).
++        switch (rpeType) {
++        case 1: note.type = 1; break;
++        case 2: note.type = 3; break;
++        case 3: note.type = 4; break;
++        case 4: note.type = 2; break;
++        default: note.type = 1; break;
++        }
+         if (note.type < 1 || note.type > 4) note.type = 1;
+-        float startBeat = readBeat(obj(jn, "startTime"));
+-        float endBeat = readBeat(obj(jn, "endTime"), startBeat);
+-        float t0 = tempo.secOf(startBeat);
+-        float t1 = tempo.secOf(endBeat);
++        double startBeat = readBeat(obj(jn, "startTime"));
++        double endBeat = readBeat(obj(jn, "endTime"), startBeat);
++        double t0 = tempo.secOf(startBeat);
++        double t1 = tempo.secOf(endBeat);
+         if (t1 < t0) t1 = t0;
+         note.secTime = t0;
+         note.secHoldEndTime = t1;
+@@ -249,12 +260,23 @@ void readNotes(const cJSON* line, const Tempo& tempo, JudgeLine& out) {
+         note.positionX = noteX(numOf(obj(jn, "positionX"), 0.0f));
+         note.speed = numOf(obj(jn, "speed"), 1.0f);
+         if (note.speed <= 0.0f) note.speed = 1.0f;
++        const cJSON* official = obj(jn, "phiRenderOfficialHold");
++        if (official && note.type == 3) {
++            const cJSON* speed = obj(official, "speed");
++            if (numOf(obj(official, "version")) != 1 || !cJSON_IsNumber(speed) ||
++                !std::isfinite(speed->valuedouble) || speed->valuedouble < 0)
++                throw std::runtime_error("invalid phiRenderOfficialHold compatibility data");
++            note.officialHold = true;
++            note.officialHoldSpeed = float(speed->valuedouble);
++        }
+         note.size = numOf(obj(jn, "size"), 1.0f);
+         if (note.size <= 0.0f) note.size = 1.0f;
+         note.alpha = std::max(0.0f, std::min(1.0f, numOf(obj(jn, "alpha"), 255.0f) / 255.0f));
+         note.above = flagOf(obj(jn, "above"), 1.0f) > 0.5f;
+         note.isFake = flagOf(obj(jn, "isFake"), 0.0f) > 0.5f;
+         note.floorPosition = out.rpeFpAt(t0);
++        if(note.type==3) for(double beat=startBeat;beat<endBeat-1e-9;beat+=0.5)
++            note.holdEffectTimes.push_back(float(tempo.secOf(beat)));
+         if (note.above) out.notesAbove.push_back(note);
+         else out.notesBelow.push_back(note);
+     }
+@@ -307,13 +329,6 @@ bool readBlock(const cJSON* jb, const Tempo& tempo, BlockArea& out) {
+             out.rpeReadySec.push_back(ready);
+         }
+     }
+-    if (out.rpeActStart.empty()) {
+-        // No activeIntervals: treat the whole visible range as active (legacy
+-        // RPE block areas use appearTime..disappearTime only).
+-        out.rpeActStart.push_back(out.appearTime);
+-        out.rpeActEnd.push_back(out.disappearTime);
+-        out.rpeReadySec.push_back(0.0f);
+-    }
+ 
+     struct TrackRef {
+         const char* name;
+@@ -326,8 +341,8 @@ bool readBlock(const cJSON* jb, const Tempo& tempo, BlockArea& out) {
+         dst.reserve((size_t)n);
+         for (const cJSON* e = list->child; e; e = e->next) {
+             BlockArea::RpeBlockEvent ev;
+-            float b0 = readBeat(obj(e, "startTime"));
+-            float b1 = readBeat(obj(e, "endTime"), b0);
++            double b0 = readBeat(obj(e, "startTime"));
++            double b1 = readBeat(obj(e, "endTime"), b0);
+             ev.time = tempo.secOf(b0);
+             ev.endTime = tempo.secOf(b1);
+             if (ev.endTime < ev.time) std::swap(ev.time, ev.endTime);
+@@ -339,9 +354,17 @@ bool readBlock(const cJSON* jb, const Tempo& tempo, BlockArea& out) {
+                 const cJSON* a = obj(e, "anchor");
+                 ev.anchorPx = Vec2(numOf(obj(a, "x"), 0.0f), numOf(obj(a, "y"), 0.0f));
+             }
++            ev.transformStart = numOf(obj(e, "transformStart"), ev.value);
++            ev.transformEnd = numOf(obj(e, "transformEnd"), ev.endValue);
++            ev.transformStep = flagOf(obj(e, "transformStep")) > 0.5f;
++            ev.left = numOf(obj(e, "easingLeft"), 0);
++            ev.right = numOf(obj(e, "easingRight"), 1);
++            ev.bezier = flagOf(obj(e, "bezier")) > 0.5f;
++            const cJSON* pts = obj(e, "bezierPoints");
++            for (int i=0;i<4;++i) ev.points[i] = numOf(cJSON_GetArrayItem(pts,i), i<2?0:1);
+             dst.push_back(ev);
+         }
+-        std::sort(dst.begin(), dst.end(), [](const BlockArea::RpeBlockEvent& a, const BlockArea::RpeBlockEvent& b) {
++        std::stable_sort(dst.begin(), dst.end(), [](const BlockArea::RpeBlockEvent& a, const BlockArea::RpeBlockEvent& b) {
+             return a.time < b.time;
+         });
+     };
+@@ -465,7 +488,7 @@ bool loadRpeChart(const std::string& path, Chart& out, std::string* error) {
+     out.rpe = true;
+     out.formatVersion = 3;
+     out.sourceFormat = "rpe";
+-    out.offset = 0.0f;
++    out.offset = -numOf(obj(meta, "offset")) / 1000.0f;
+     if (meta) {
+         const cJSON* name = obj(meta, "name");
+         if (name && cJSON_IsString(name)) out.songName = name->valuestring;
+@@ -487,6 +510,11 @@ bool loadRpeChart(const std::string& path, Chart& out, std::string* error) {
+         if (factor <= 0.0f) factor = 1.0f;
+         readLayers(jl, tempo, factor, line);
+         readNotes(jl, tempo, line);
++        for (auto* list : {&line.notesAbove, &line.notesBelow}) for(auto& note : *list) {
++            note.secTime += out.offset;
++            note.secHoldEndTime += out.offset;
++            for(auto& t:note.holdEffectTimes)t+=out.offset;
++        }
+         out.noteCount += (int)(line.notesAbove.size() + line.notesBelow.size());
+     }
+ 
+@@ -495,7 +523,14 @@ bool loadRpeChart(const std::string& path, Chart& out, std::string* error) {
+     out.blocks.reserve((size_t)nBlocks);
+     for (int i = 0; i < nBlocks; ++i) {
+         BlockArea area;
+-        if (readBlock(cJSON_GetArrayItem(blocks, i), tempo, area)) out.blocks.push_back(std::move(area));
++        if (readBlock(cJSON_GetArrayItem(blocks, i), tempo, area)) {
++            area.appearTime+=out.offset; area.disappearTime+=out.offset;
++            for(auto& t:area.rpeActStart)t+=out.offset;
++            for(auto& t:area.rpeActEnd)t+=out.offset;
++            for(auto* track:{&area.rpeMoveX,&area.rpeMoveY,&area.rpeRot,&area.rpeScaleX,&area.rpeScaleY})
++                for(auto& e:*track){e.time+=out.offset;e.endTime+=out.offset;}
++            out.blocks.push_back(std::move(area));
++        }
+     }
+ 
+     cJSON_Delete(root);

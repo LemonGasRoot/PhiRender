@@ -1,5 +1,7 @@
 //! Private GPU worker for the desktop application. The chart renderer remains
 //! the shared Phira Pro engine; this process owns its OpenGL event loop.
+mod recorder_worker;
+
 use anyhow::{anyhow, Context, Result};
 use macroquad::{file::set_pc_assets_folder, prelude::*};
 use prpr::{
@@ -23,6 +25,8 @@ use std::{
 
 #[derive(Deserialize)]
 struct Job {
+    #[serde(default)]
+    engine: String,
     kind: String,
     chart: PathBuf,
     output: PathBuf,
@@ -243,12 +247,31 @@ fn prepare_skin(job: &Job, assets: &Path) -> Result<SkinStage> {
     Ok(stage)
 }
 
-#[macroquad::main(conf)]
-async fn main() {
-    let result = run().await;
-    if let Err(error) = result {
-        event(json!({"type":"error", "message":format!("{error:#}")}));
-        std::process::exit(1);
+fn main() {
+    let route = (|| -> Result<bool> {
+        let path = std::env::args_os().nth(1).context("缺少任务文件")?;
+        let job: Job = serde_json::from_slice(&std::fs::read(path)?)?;
+        if job.engine == "recorder" && job.kind != "audio_export" {
+            recorder_worker::run(job)?;
+            Ok(true)
+        } else if job.engine.is_empty() || job.engine == "legacy" || job.kind == "audio_export" {
+            Ok(false)
+        } else {
+            Err(anyhow!("未知渲染引擎：{}", job.engine))
+        }
+    })();
+    match route {
+        Ok(true) => {}
+        Ok(false) => macroquad::Window::from_config(conf(), async {
+            if let Err(error) = run().await {
+                event(json!({"type":"error","message":format!("{error:#}")}));
+                std::process::exit(1);
+            }
+        }),
+        Err(error) => {
+            event(json!({"type":"error","message":format!("{error:#}")}));
+            std::process::exit(1);
+        }
     }
 }
 
@@ -275,11 +298,14 @@ async fn run() -> Result<()> {
     let fallback = read_font(&assets.join("harmonyos.ttf"))?;
     let mut painter = TextPainter::new(fallback.clone(), None);
     let reference_font = read_font(&assets.join("phigros.ttf"))?;
-    let font_path = job
-        .font
-        .clone()
-        .unwrap_or_else(|| assets.join("phigros.ttf"));
-    let font = read_font(&font_path)?;
+    let font = if let Some(path) = job.font.as_ref() {
+        read_font(path)?
+    } else {
+        FontArc::try_from_vec(
+            include_bytes!("../apps/desktop/src-tauri/resources/saira-regular.ttf").to_vec(),
+        )
+        .map_err(|error| anyhow!("Could not load built-in Saira-Regular: {error}"))?
+    };
     let mut gameplay_font = TextPainter::new(font, Some(fallback.clone()));
     gameplay_font.normalize_to(&reference_font);
     HUD_INFO_FONT.with(|slot| *slot.borrow_mut() = Some(gameplay_font));

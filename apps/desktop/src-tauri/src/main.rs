@@ -24,6 +24,7 @@ const BUILTIN_GAME_FONT: &[u8] = include_bytes!("../resources/saira-regular.ttf"
 #[serde(default)]
 struct Settings {
     theme: String,
+    engine: String,
     skin: Option<String>,
     font: Option<String>,
     click_sound: Option<String>,
@@ -49,6 +50,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             theme: "system".into(),
+            engine: "recorder".into(),
             skin: None,
             font: None,
             click_sound: None,
@@ -68,7 +70,7 @@ impl Default for Settings {
             sample_count: 1,
             chart_delay_ms: 0.0,
             experimental_config: json!({}),
-            settings_version: 9,
+            settings_version: 10,
         }
     }
 }
@@ -234,6 +236,10 @@ fn initial_state() -> Inner {
     if settings.settings_version < 9 {
         settings.chart_delay_ms = 0.0;
         settings.settings_version = 9;
+    }
+    if settings.settings_version < 10 {
+        settings.engine = "recorder".into();
+        settings.settings_version = 10;
     }
     if settings.skin.is_none() {
         let phira = root.join("work/Phira-Pro/assets/respack");
@@ -588,7 +594,8 @@ async fn fetch_bilibili_display_name() -> Result<String, String> {
 }
 #[tauri::command]
 fn save_settings(state: State<'_, AppState>, settings: Settings) -> Result<(), String> {
-    if !["light", "dark", "system"].contains(&settings.theme.as_str())
+    if !["recorder", "legacy"].contains(&settings.engine.as_str())
+        || !["light", "dark", "system"].contains(&settings.theme.as_str())
         || !settings.music_volume.is_finite()
         || !(0.0..=2.0).contains(&settings.music_volume)
         || !settings.hitsound_volume.is_finite()
@@ -885,7 +892,7 @@ fn start_task(
     };
     let (start, end) = range.unwrap_or((0., None));
     let using_nvenc = settings.nvenc;
-    let job = json!({"kind":worker_kind,"chart":chart.prepared,"output":dest,"project_root":inner.root,"skin":settings.skin,"font":settings.font,
+    let job = json!({"engine":settings.engine,"kind":worker_kind,"chart":chart.prepared,"output":dest,"project_root":inner.root,"skin":settings.skin,"font":settings.font,
         "width":width,"height":height,"fps":fps,"time":time.max(0.),"start":start,"end":end,"show_hud":settings.show_hud,"include_audio":settings.include_audio,
         "hitsounds":settings.hitsounds,"music_volume":settings.music_volume,"hitsound_volume":settings.hitsound_volume,"nvenc":settings.nvenc,
         "sample_count":settings.sample_count,"chart_delay_ms":settings.chart_delay_ms,"experimental_config":settings.experimental_config,
@@ -1284,4 +1291,25 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("无法启动 PhiRender 桌面界面");
+}
+
+#[cfg(test)]
+mod engine_settings_tests {
+    use super::*;
+    #[test]
+    fn old_preferences_acquire_new_engine_without_resetting_other_fields() {
+        let s: Settings=serde_json::from_value(json!({"theme":"dark","music_volume":0.7,"hitsound_volume":0.35,"preview_resolution":720,"settings_version":9})).unwrap();
+        assert_eq!(s.engine, "recorder");
+        assert_eq!(s.theme, "dark");
+        assert_eq!(s.music_volume, 0.7);
+        assert_eq!(s.hitsound_volume, 0.35);
+        assert_eq!(s.preview_resolution, 720);
+        let mut s = s;
+        s.engine = "legacy".into();
+        let saved = serde_json::to_value(&s).unwrap();
+        assert_eq!(
+            serde_json::from_value::<Settings>(saved).unwrap().engine,
+            "legacy"
+        );
+    }
 }

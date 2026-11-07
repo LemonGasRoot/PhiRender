@@ -97,7 +97,7 @@ fn rpe_note(note: &Value, above: u8, path: &str) -> Result<Value> {
     } else {
         field_num(note, "speed", path, Some(1.0))?
     };
-    Ok(object([
+    let mut converted = object([
         ("type", json!(ty)),
         ("startTime", json!(to_beat(time))),
         (
@@ -112,7 +112,17 @@ fn rpe_note(note: &Value, above: u8, path: &str) -> Result<Value> {
         ("yOffset", json!(0.0)),
         ("visibleTime", json!(999999.0)),
         ("alpha", json!(255)),
-    ]))
+    ]);
+    if ty == 2 {
+        // Official holds use their own speed for body length, independently of
+        // line scrolling. Keep RPE speed=1 and carry this small compatibility
+        // record in both modes; no original-document backup is required.
+        converted["phiRenderOfficialHold"] = json!({
+            "version": 1,
+            "speed": field_num(note, "speed", path, Some(1.0))?
+        });
+    }
+    Ok(converted)
 }
 
 fn rpe_line(line: &Value, index: usize, base_bpm: f64) -> Result<Value> {

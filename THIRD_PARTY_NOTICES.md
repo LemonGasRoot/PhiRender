@@ -30,3 +30,7 @@ PhiVideo source is MIT-licensed. It was inspected as a rendering reference; PhiR
 - React, Vite, TypeScript, and other npm packages retain their upstream licenses. See `apps/desktop/package-lock.json` and each package's license files.
 - FFmpeg is an external runtime dependency and retains the license of the build selected by the user or distributor. A release package must identify the exact FFmpeg build and comply with its configuration-specific license.
 
+
+## Phi-recorder local development integration
+
+The dual-engine desktop build can use RyderLyx/phi-recorder at the pinned revision in `vendor-snapshots/phi-recorder/BASE_COMMIT.txt`, with the recorded local patches. The upstream checkout has no standalone LICENSE; its README references licenses of source-derived components but does not explicitly license every original upstream contribution. The current integration is for local development. Confirm the upstream grant before a public combined release. The local runtime package can contain existing/user-provided assets; it must not be treated as the previously audited public distribution.
