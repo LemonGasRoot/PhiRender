@@ -1,0 +1,310 @@
+From 9bccda26236185a6f75d32256df73fbf0a78551f Mon Sep 17 00:00:00 2001
+From: LemonGasRoot <138586127+LemonGasRoot@users.noreply.github.com>
+Date: Sat, 7 Nov 2026 23:45:24 +0800
+Subject: [PATCH] fix: preserve official hold length across scroll-speed
+ changes
+
+---
+ prpr/src/bin.rs               | 65 +++++++++++++++++++++++++++++++----
+ prpr/src/core.rs              |  1 +
+ prpr/src/core/hold_body.rs    | 33 ++++++++++++++++++
+ prpr/src/core/note.rs         | 16 +++++++--
+ prpr/src/judge/input_tests.rs |  1 +
+ prpr/src/parse/pec.rs         |  1 +
+ prpr/src/parse/pgr.rs         | 35 +++++++++++++++++++
+ prpr/src/parse/rpe.rs         |  1 +
+ 8 files changed, 145 insertions(+), 8 deletions(-)
+ create mode 100644 prpr/src/core/hold_body.rs
+
+diff --git a/prpr/src/bin.rs b/prpr/src/bin.rs
+index ec78c45..aa0ef87 100644
+--- a/prpr/src/bin.rs
++++ b/prpr/src/bin.rs
+@@ -321,12 +321,18 @@ impl BinaryData for CtrlObject {
+ impl BinaryData for Note {
+     fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
+         let object = r.read()?;
+-        let kind = match r.read::<u8>()? {
++        let tag = r.read::<u8>()?;
++        let mut hold_body_speed = None;
++        let kind = match tag {
+             0 => NoteKind::Click,
+-            1 => NoteKind::Hold {
+-                end_time: r.read::<f32>()? as f64,
+-                end_height: r.read::<f32>()? as f64,
+-            },
++            1 | 4 => {
++                let end_time = r.read::<f32>()? as f64;
++                let end_height = r.read::<f32>()? as f64;
++                if tag == 4 {
++                    hold_body_speed = Some(r.read::<f32>()? as f64);
++                }
++                NoteKind::Hold { end_time, end_height }
++            }
+             2 => NoteKind::Flick,
+             3 => NoteKind::Drag,
+             _ => bail!("invalid note kind"),
+@@ -346,6 +352,7 @@ impl BinaryData for Note {
+             color: WHITE,
+             fx_color: None,
+             judge_area: 1.,
++            hold_body_speed,
+         })
+     }
+ 
+@@ -356,9 +363,14 @@ impl BinaryData for Note {
+                 w.write_val(0_u8)?;
+             }
+             NoteKind::Hold { end_time, end_height } => {
+-                w.write_val(1_u8)?;
++                // Tag 1 remains the legacy integral hold; tag 4 also carries
++                // the independent body speed for lossless PGR round trips.
++                w.write_val(if self.hold_body_speed.is_some() { 4_u8 } else { 1_u8 })?;
+                 w.write_val(end_time as f32)?;
+                 w.write_val(end_height as f32)?;
++                if let Some(speed) = self.hold_body_speed {
++                    w.write_val(speed as f32)?;
++                }
+             }
+             NoteKind::Flick => w.write_val(2_u8)?,
+             NoteKind::Drag => w.write_val(3_u8)?,
+@@ -490,3 +502,44 @@ impl BinaryData for Chart {
+         Ok(())
+     }
+ }
++
++#[cfg(test)]
++mod hold_body_binary_tests {
++    use super::*;
++    #[test]
++    fn independent_and_legacy_holds_round_trip() {
++        for body_speed in [None, Some(5.)] {
++            let note = Note {
++                object: Object::default(),
++                kind: NoteKind::Hold {
++                    end_time: 4.,
++                    end_height: 100.,
++                },
++                hitsound: HitSound::Click,
++                time: 2.,
++                height: 10.,
++                speed: 1.,
++                color: WHITE,
++                fx_color: None,
++                judge_area: 1.,
++                hold_body_speed: body_speed,
++                above: true,
++                multiple_hint: false,
++                fake: false,
++                judge: JudgeStatus::NotJudged,
++            };
++            let mut data = Vec::new();
++            note.write_binary(&mut BinaryWriter::new(&mut data)).unwrap();
++            let restored = Note::read_binary(&mut BinaryReader::new(data.as_slice())).unwrap();
++            assert_eq!(restored.hold_body_speed, body_speed);
++            assert_eq!(restored.speed, 1.);
++            assert!(matches!(
++                restored.kind,
++                NoteKind::Hold {
++                    end_time: 4.,
++                    end_height: 100.
++                }
++            ));
++        }
++    }
++}
+diff --git a/prpr/src/core.rs b/prpr/src/core.rs
+index 6b85c8e..9a0656b 100644
+--- a/prpr/src/core.rs
++++ b/prpr/src/core.rs
+@@ -51,6 +51,7 @@ pub use effect::{Effect, Uniform};
+ mod line;
+ pub use line::{GifFrames, JudgeLine, JudgeLineCache, JudgeLineKind, UIElement};
+ 
++mod hold_body;
+ mod note;
+ use macroquad::prelude::set_pc_assets_folder;
+ pub use note::{BadNote, HitSound, Note, NoteKind, RenderConfig, FADEOUT_TIME};
+diff --git a/prpr/src/core/hold_body.rs b/prpr/src/core/hold_body.rs
+new file mode 100644
+index 0000000..a82d24f
+--- /dev/null
++++ b/prpr/src/core/hold_body.rs
+@@ -0,0 +1,33 @@
++//! Hold geometry with independent official-chart body speed.
++/// `body_speed` is in normalized chart units/second, after projection/scaling.
++/// Native RPE holds keep their integrated tail when the override is absent.
++pub(crate) fn tail_height(head: f64, start: f64, end: f64, now: f64, body_speed: Option<f64>, integrated_tail: f64) -> f64 {
++    body_speed.map_or(integrated_tail, |speed| head + (end - now.max(start)).max(0.) * speed)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::tail_height;
++    #[test]
++    fn official_length_does_not_follow_line_speed_changes() {
++        for integral in [-100., 0., 1000.] {
++            assert_eq!(tail_height(10., 2., 4., 1., Some(5.), integral), 20.);
++        }
++    }
++    #[test]
++    fn held_body_shrinks_by_remaining_time() {
++        assert_eq!(tail_height(0., 2., 4., 2., Some(5.), 100.), 10.);
++        assert_eq!(tail_height(0., 2., 4., 3., Some(5.), 100.), 5.);
++        assert_eq!(tail_height(0., 2., 4., 5., Some(5.), 100.), 0.);
++    }
++    #[test]
++    fn native_rpe_integral_tail_is_unchanged() {
++        assert_eq!(tail_height(10., 2., 4., 1., None, 37.), 37.);
++        assert_eq!(tail_height(0., 2., 4., 3., None, -2.), -2.);
++    }
++    #[test]
++    fn constant_speed_matches_the_existing_integral() {
++        assert_eq!(tail_height(10., 2., 4., 1., Some(5.), 20.), 20.);
++        assert_eq!(tail_height(0., 2., 4., 3., Some(5.), 5.), 5.);
++    }
++}
+diff --git a/prpr/src/core/note.rs b/prpr/src/core/note.rs
+index 009f384..07641a0 100644
+--- a/prpr/src/core/note.rs
++++ b/prpr/src/core/note.rs
+@@ -42,6 +42,7 @@ mod debug_geometry_tests {
+             color: WHITE,
+             fx_color: None,
+             judge_area: 1.,
++            hold_body_speed: None,
+             above: true,
+             multiple_hint: false,
+             fake: false,
+@@ -103,6 +104,9 @@ pub struct Note {
+     pub color: Color,
+     pub fx_color: Option<Color>,
+     pub judge_area: f32,
++    /// Optional body speed, independent of head scrolling (official PGR holds).
++    /// None retains the native RPE integrated-tail behavior.
++    pub hold_body_speed: Option<f64>,
+ 
+     /// From the other side of the line
+     pub above: bool,
+@@ -206,6 +210,13 @@ fn draw_center(res: &Resource, tex: Texture2D, order: i8, scale: f32, color: Col
+ }
+ 
+ impl Note {
++    fn hold_tail_height(&self, now: f64, aspect: f32, visual_speed: f64, head: f64, integrated_tail: f64) -> f64 {
++        let end = match self.kind {
++            NoteKind::Hold { end_time, .. } => end_time,
++            _ => self.time,
++        };
++        super::hold_body::tail_height(head, self.time, end, now, self.hold_body_speed.map(|v| v / aspect as f64 * visual_speed), integrated_tail)
++    }
+     pub fn rotation(&self, line: &JudgeLine) -> f32 {
+         line.object.rotation.now() + if self.above { 0. } else { 180. }
+     }
+@@ -343,7 +354,8 @@ impl Note {
+             match self.kind {
+                 NoteKind::Hold { end_time: _, end_height } => {
+                     let end_height = end_height / res.aspect_ratio as f64 * spd;
+-                    end_height - line_height
++                    let head = if res.time >= self.time { 0. } else { height - line_height };
++                    self.hold_tail_height(res.time, res.aspect_ratio, spd, head, end_height - line_height)
+                 }
+                 _ => height - line_height,
+             }
+@@ -398,7 +410,7 @@ impl Note {
+ 
+                     let h = if self.time <= res.time { line_height } else { height };
+                     let bottom = (h - line_height) as f32;
+-                    let top = (end_height - line_height) as f32;
++                    let top = self.hold_tail_height(res.time, res.aspect_ratio, spd, bottom as f64, end_height - line_height) as f32;
+                     let tex = &style.hold;
+                     let ratio = style.hold_ratio();
+                     // body
+diff --git a/prpr/src/judge/input_tests.rs b/prpr/src/judge/input_tests.rs
+index 28bf171..994fd95 100644
+--- a/prpr/src/judge/input_tests.rs
++++ b/prpr/src/judge/input_tests.rs
+@@ -15,6 +15,7 @@ fn chart(notes: Vec<(f64, NoteKind)>) -> Chart {
+             color: WHITE,
+             fx_color: None,
+             judge_area: 1.,
++            hold_body_speed: None,
+             above: true,
+             multiple_hint: false,
+             fake: false,
+diff --git a/prpr/src/parse/pec.rs b/prpr/src/parse/pec.rs
+index 99f3eb6..a8813ef 100644
+--- a/prpr/src/parse/pec.rs
++++ b/prpr/src/parse/pec.rs
+@@ -289,6 +289,7 @@ pub fn parse_pec(source: &str, extra: ChartExtra) -> Result<Chart> {
+                         color: WHITE,
+                         fx_color: None,
+                         judge_area: 1.,
++                        hold_body_speed: None,
+                     });
+                     if it.next() == Some("#") {
+                         last_note!().speed = it.take_f32()? as f64;
+diff --git a/prpr/src/parse/pgr.rs b/prpr/src/parse/pgr.rs
+index 8bf2cef..ca20c66 100644
+--- a/prpr/src/parse/pgr.rs
++++ b/prpr/src/parse/pgr.rs
+@@ -341,6 +341,7 @@ fn parse_notes(r: f64, mut pgr: Vec<PgrNote>, _speed: &mut AnimFloat, height: &m
+                 color: WHITE,
+                 fx_color: None,
+                 judge_area: 1.,
++                hold_body_speed: (pgr.kind == 3).then_some(pgr.speed as f64 / HEIGHT_RATIO),
+             })
+         })
+         .collect()
+@@ -567,3 +568,37 @@ mod tests {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod official_hold_body_tests {
++    use super::*;
++    #[test]
++    fn own_body_speed_is_preserved_without_changing_head_scrolling() {
++        for above in [true, false] {
++            let pgr = vec![PgrNote {
++                kind: 3,
++                time: 2.,
++                position_x: 0.,
++                hold_time: 4.,
++                speed: 5.,
++                floor_position: 0.,
++            }];
++            let notes = parse_notes(0.25, pgr, &mut AnimFloat::fixed(0.), &mut AnimFloat::fixed(10.), above).unwrap();
++            assert_eq!(notes[0].speed, 1.);
++            assert_eq!(notes[0].hold_body_speed, Some(5. / HEIGHT_RATIO));
++            assert_eq!(notes[0].height, 10.);
++            assert_eq!(notes[0].above, above);
++        }
++        let pgr = vec![PgrNote {
++            kind: 1,
++            time: 2.,
++            position_x: 0.,
++            hold_time: 0.,
++            speed: 2.5,
++            floor_position: 0.,
++        }];
++        let notes = parse_notes(0.25, pgr, &mut AnimFloat::fixed(0.), &mut AnimFloat::fixed(10.), true).unwrap();
++        assert_eq!(notes[0].speed, 2.5);
++        assert_eq!(notes[0].hold_body_speed, None);
++    }
++}
+diff --git a/prpr/src/parse/rpe.rs b/prpr/src/parse/rpe.rs
+index 5b00892..d807205 100644
+--- a/prpr/src/parse/rpe.rs
++++ b/prpr/src/parse/rpe.rs
+@@ -663,6 +663,7 @@ async fn parse_notes(
+             color: note.tint.or(note.legacy_tint).map_or(WHITE, |[r, g, b]| Color::from_rgba(r, g, b, 255)),
+             fx_color: note.tint_hit_effects.map(|[r, g, b]| Color::from_rgba(r, g, b, 255)),
+             judge_area: note.judge_area.unwrap_or(1.0),
++            hold_body_speed: None,
+ 
+             above: note.above == 1,
+             multiple_hint: false,
+-- 
+2.55.0.windows.3
+
