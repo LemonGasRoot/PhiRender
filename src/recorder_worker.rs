@@ -112,7 +112,15 @@ fn ffmpeg(root: &Path) -> Result<PathBuf> {
     if p.is_file() {
         return Ok(p);
     }
-    bail!("找不到FFmpeg")
+    if let Some(paths) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&paths) {
+            let exe = dir.join("ffmpeg.exe");
+            if exe.is_file() {
+                return Ok(exe);
+            }
+        }
+    }
+    bail!("找不到 FFmpeg：请将 ffmpeg.exe 和 ffprobe.exe 放入 PATH，或设置 PHIRA_FFMPEG")
 }
 fn resource(root: &Path, chart: &str, name: &str) -> Result<PathBuf> {
     if name.is_empty() {

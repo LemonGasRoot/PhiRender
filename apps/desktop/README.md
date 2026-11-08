@@ -74,3 +74,8 @@ the desktop uses those files locally rather than copying them into a public
 release. Saira is accompanied by its SIL OFL 1.1 notice. Tauri is MIT/Apache-2.0;
 frontend packages retain their own licenses. See the root `LICENSE` and
 `work/Phira-Pro/THIRD_PARTY_NOTICES.md`.
+
+
+## Native engine (v0.2.0)
+
+Run `powershell -ExecutionPolicy Bypass -File tools/build-recorder.ps1` from the repository root with MinGW-w64 available. The patched engine source is bundled in `vendor-snapshots/phi-recorder/source`; the build no longer depends on the upstream repository being online. Keep the resulting `phirender-recorder.exe`, `libwinpthread-1.dll` and `recorder-assets` beside `phirender-gpu-worker.exe`. Both engines use the selected skin; the default is `work/Phira-Pro/assets/respack-open` (CC0). FFmpeg and ffprobe must be installed separately and available through PATH, or select FFmpeg with PHIRA_FFMPEG.
