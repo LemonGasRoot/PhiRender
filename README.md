@@ -40,10 +40,6 @@ PhiRender 是面向 Windows 10/11 x64 的 Phigros 谱面转换与 GPU 渲染工�
 
 PhiRender 源码以 GPL-3.0-only 发布。RPEN 作者已明确同意相关转换代码随 PhiRender 按 GPL-3.0-only 使用、修改和分发；项目自身以非商业方式维护。GPL 接收者仍拥有 GPL 明确授予的权利，包括商业使用。字体、皮肤和依赖的具体许可见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
-### 贡献者
-
-- [RyderLyx](https://github.com/RyderLyx)：Phi-Recorder 渲染内核及相关改进。
-
 ---
 
 ## English
@@ -84,6 +80,3 @@ You need Rust, Node.js, Windows C++ Build Tools, and the WebView2 Runtime. Follo
 
 PhiRender source is released under GPL-3.0-only. The RPEN author explicitly authorized the relevant conversion code to be used, modified, and distributed with PhiRender under GPL-3.0-only. PhiRender itself is maintained for noncommercial use; GPL recipients retain all rights granted by GPL, including commercial use. See [third-party notices](THIRD_PARTY_NOTICES.md) for fonts, skins, and dependencies.
 
-### Contributors
-
-- [RyderLyx](https://github.com/RyderLyx): Phi-Recorder rendering engine and related improvements.
