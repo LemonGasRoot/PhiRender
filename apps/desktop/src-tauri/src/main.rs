@@ -241,12 +241,7 @@ fn initial_state() -> Inner {
         settings.engine = "recorder".into();
         settings.settings_version = 10;
     }
-    if settings.skin.is_none() {
-        let phira = root.join("work/Phira-Pro/assets/respack");
-        if phira.is_dir() {
-            settings.skin = Some(phira.to_string_lossy().into_owned());
-        }
-    }
+    apply_default_skin(&mut settings, &root);
     let builtin_font = cache.join("saira-regular.ttf");
     if !builtin_font.is_file() {
         let _ = std::fs::write(&builtin_font, BUILTIN_GAME_FONT);
@@ -764,6 +759,21 @@ async fn choose_skin(folder: bool) -> Result<Option<String>, String> {
     .await
     .map_err(msg)?
 }
+fn apply_default_skin(settings: &mut Settings, root: &Path) {
+    let old_builtin = settings.skin.as_deref().is_some_and(|p| {
+        p.replace('\\', "/")
+            .ends_with("/work/Phira-Pro/assets/respack")
+    });
+    if settings.skin.is_none() || (settings.settings_version < 11 && old_builtin) {
+        settings.skin = Some(
+            root.join("work/Phira-Pro/assets/respack-open")
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+    settings.settings_version = settings.settings_version.max(11);
+}
+
 #[tauri::command]
 fn default_skin(state: State<'_, AppState>) -> Result<String, String> {
     let path = state
@@ -771,9 +781,9 @@ fn default_skin(state: State<'_, AppState>) -> Result<String, String> {
         .lock()
         .unwrap()
         .root
-        .join("work/Phira-Pro/assets/respack");
+        .join("work/Phira-Pro/assets/respack-open");
     if !path.is_dir() {
-        return Err("找不到本机 Phira 默认皮肤，请选择资源包".into());
+        return Err("找不到 PhiRender 默认皮肤，请选择资源包".into());
     }
     Ok(path.to_string_lossy().into_owned())
 }
@@ -868,23 +878,7 @@ fn start_task(
     } else {
         (settings.width, settings.height, settings.fps)
     };
-    let phira_skin = inner.root.join("work/Phira-Pro/assets/respack");
-    let use_phira_sounds = settings
-        .skin
-        .as_ref()
-        .is_some_and(|p| Path::new(p) == phira_skin);
-    let sound_path = |selected: &Option<String>, name: &str| {
-        selected.clone().or_else(|| {
-            if !use_phira_sounds {
-                return None;
-            }
-            let p = inner
-                .root
-                .join("work/Phira-Pro/assets")
-                .join(format!("{name}.ogg"));
-            p.is_file().then(|| p.to_string_lossy().into_owned())
-        })
-    };
+    let sound_path = |selected: &Option<String>, _name: &str| selected.clone();
     let worker_kind = if kind == "preview_video" {
         "export"
     } else {
@@ -1311,5 +1305,32 @@ mod engine_settings_tests {
             serde_json::from_value::<Settings>(saved).unwrap().engine,
             "legacy"
         );
+    }
+}
+
+#[cfg(test)]
+mod skin_settings_tests {
+    use super::*;
+    #[test]
+    fn missing_skin_uses_open_pack() {
+        let mut s = Settings::default();
+        apply_default_skin(&mut s, Path::new("bundle"));
+        assert!(s
+            .skin
+            .unwrap()
+            .replace('\\', "/")
+            .ends_with("assets/respack-open"));
+    }
+    #[test]
+    fn migrate_builtin_without_resetting_custom_skin() {
+        let mut s = Settings::default();
+        s.settings_version = 10;
+        s.skin = Some("C:/old/work/Phira-Pro/assets/respack".into());
+        apply_default_skin(&mut s, Path::new("bundle"));
+        assert!(s.skin.as_ref().unwrap().ends_with("respack-open"));
+        s.settings_version = 10;
+        s.skin = Some("C:/my-skin.zip".into());
+        apply_default_skin(&mut s, Path::new("bundle"));
+        assert_eq!(s.skin.as_deref(), Some("C:/my-skin.zip"));
     }
 }

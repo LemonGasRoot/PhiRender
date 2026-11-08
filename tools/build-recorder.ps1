@@ -8,19 +8,8 @@ $root=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $snapshot=Join-Path $root 'vendor-snapshots/phi-recorder'
 $revision=(Get-Content -LiteralPath (Join-Path $snapshot 'BASE_COMMIT.txt') -Raw).Trim()
 if(!$SourceDirectory){
-    $SourceDirectory=Join-Path $root 'work/phi-recorder'
-    if(!(Test-Path -LiteralPath $SourceDirectory)){
-        & git clone --no-checkout https://github.com/RyderLyx/phi-recorder.git $SourceDirectory
-        if($LASTEXITCODE){throw 'Native source clone failed'}
-        & git -C $SourceDirectory checkout $revision
-        if($LASTEXITCODE){throw 'Native source revision checkout failed'}
-        & git -C $SourceDirectory apply --whitespace=nowarn (Join-Path $snapshot 'local-changes.patch')
-        if($LASTEXITCODE){throw 'Native source patch failed'}
-        Copy-Item -Path (Join-Path $snapshot 'untracked/*') -Destination $SourceDirectory -Recurse -Force
-        $revision | Set-Content (Join-Path $SourceDirectory 'PHIRENDER_SNAPSHOT.txt')
-    }elseif(!(Test-Path -LiteralPath (Join-Path $SourceDirectory 'PHIRENDER_SNAPSHOT.txt'))){
-        throw 'Existing native checkout is not a restored PhiRender snapshot. Review it or pass -SourceDirectory explicitly.'
-    }
+    $SourceDirectory=Join-Path $snapshot 'source'
+    if(!(Test-Path -LiteralPath (Join-Path $SourceDirectory 'src/main.cpp'))){throw 'Missing bundled native engine source'}
 }
 $SourceDirectory=(Resolve-Path -LiteralPath $SourceDirectory).Path
 if(!(Test-Path -LiteralPath (Join-Path $SourceDirectory 'src/hitfx.h'))){throw 'The native source is missing PhiRender integration patches'}
@@ -39,4 +28,8 @@ foreach($name in @('noise','blockarea','hud')){
     Copy-Item -Path "$SourceDirectory/assets/default/$name/*" -Destination $dest -Recurse -Force
 }
 Write-Output "Native recorder: $OutputDirectory/phirender-recorder.exe"
-Write-Output 'This is a local development integration. See vendor-snapshots/phi-recorder/README.md for upstream license status.'
+Write-Output 'See THIRD_PARTY_NOTICES.md for the project-specific code permission and separate asset licenses.'
+
+foreach($notice in @('LICENSE-RPEN.txt','NOTICE.txt')) {
+    Copy-Item -LiteralPath "$SourceDirectory/assets/default/$notice" -Destination (Join-Path $OutputDirectory 'recorder-assets') -Force
+}

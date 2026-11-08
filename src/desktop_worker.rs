@@ -169,7 +169,10 @@ fn prepare_skin(job: &Job, assets: &Path) -> Result<SkinStage> {
     if !job.hitsound_volume.is_finite() || !(0.0..=8.0).contains(&job.hitsound_volume) {
         return Err(anyhow!("打击音音量必须在 0 至 8 倍之间"));
     }
-    let selected = job.skin.clone().unwrap_or_else(|| assets.join("respack"));
+    let selected = job
+        .skin
+        .clone()
+        .unwrap_or_else(|| assets.join("respack-open"));
     let phira_default = selected == assets.join("respack");
     let mut source = SkinSource::open(&selected)
         .with_context(|| format!("无法打开皮肤 {}", selected.display()))?;

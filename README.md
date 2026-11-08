@@ -10,6 +10,10 @@ PhiRender 是面向 Windows 10/11 x64 的 Phigros 谱面转换与 GPU 渲染工�
 
 从 [GitHub Releases](https://github.com/LemonGasRoot/PhiRender/releases/latest) 下载 Windows x64 压缩包，解压后运行 `PhiRender.exe`。请保留压缩包中的 `phirender-gpu-worker.exe` 和 `work` 资源目录。视频导出需要另行安装 FFmpeg，并确保 `ffmpeg.exe` 在系统 `PATH` 中；CLI 也支持通过参数指定 FFmpeg 路径。更多命令行用法见 [CLI 使用说明](README-CLI.md)。
 
+### v0.2.0 更新
+
+默认采用 Phi-Recorder 新引擎，设置中可切换回已修复官谱 Hold 条身长度的旧引擎。两个引擎共用皮肤选择：内置 CC0 默认皮肤，可导入本地 ZIP 或皮肤文件夹，应用于预览和导出。发行包不包含用户导入的官方皮肤、谱面或歌曲。
+
 ### 功能
 
 - 导入 Phigros 官方 JSON/PEZ、普通 RPE 和 RPEN 谱面。
@@ -26,7 +30,7 @@ PhiRender 是面向 Windows 10/11 x64 的 Phigros 谱面转换与 GPU 渲染工�
 
 ### 已知渲染差异
 
-本渲染引擎以 Phira Pro 渲染核心为基础，因此不可避免地可能出现部分 Hold 长条错位和流速表现差异（Phira 特性）。
+已修复官谱 Hold 条身长度错误地受判定线变速影响的问题。其他 Phira 兼容行为和流速差异仍可能存在；旧的标准版转换文件若缺失长条自身速度，请从官方谱面重新转换。
 
 ### 从源码构建
 
@@ -46,6 +50,10 @@ PhiRender is a Phigros chart converter and GPU renderer for Windows 10/11 x64. I
 
 Download the Windows x64 archive from [GitHub Releases](https://github.com/LemonGasRoot/PhiRender/releases/latest), extract it, and run `PhiRender.exe`. Keep `phirender-gpu-worker.exe` and the bundled `work` resources beside it. Video export requires FFmpeg on your system `PATH`; the CLI can also accept an explicit FFmpeg path. See the [CLI guide](README-CLI.md).
 
+### v0.2.0 update
+
+Phi-Recorder is the default engine; settings can switch to the original engine with the official hold-body fix. Both use the shared ZIP/directory skin selection for previews and export, with a CC0 default pack. User-provided official skins and charts are excluded.
+
 ### Features
 
 - Imports official Phigros JSON/PEZ, regular RPE, and RPEN charts.
@@ -62,7 +70,7 @@ The benchmark used the same original *PANIC PARADISE* PEZ for both renderers: 7,
 
 ### Known rendering differences
 
-This renderer is based on the Phira Pro rendering core. Some Hold-note bars may be misaligned, and scroll-speed behavior may differ; these are known Phira-core characteristics.
+Official hold bodies no longer incorrectly follow judge-line speed changes. Other Phira compatibility and scroll-speed differences may remain. Reconvert older standard outputs missing the original hold speed from their official source.
 
 ### Build from source
 

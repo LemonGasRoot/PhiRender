@@ -20,4 +20,6 @@ The native renderer uses supersampling for the AA quality selector; the legacy e
 
 Build the native snapshot with tools/build-recorder.ps1 (MinGW-w64), or pass an already-patched source checkout via -SourceDirectory. Build the Rust worker/CLIs and Tauri GUI with Cargo, then place phirender-recorder.exe, libwinpthread-1.dll and recorder-assets next to the desktop worker. Both workers need the existing Phira runtime assets and FFmpeg under the packaged project root. See the local package instructions for exact directory layout.
 
-The native upstream does not include a standalone LICENSE. The current package is a local development build; public redistribution needs upstream license clarification and the existing asset-license review.
+On 2026-11-08 the project owner confirmed permission from the native engine author for GPL-3.0-only distribution with PhiRender. The patched buildable source is bundled under vendor-snapshots/phi-recorder/source. Default gameplay resources are the CC0 pack; separate RPEN resources retain their notices. User-imported resources and preferences are excluded from public packages.
+
+The default skin is respack-open for both workers. GUI schema version 11 migrates the former automatic bundled Phira skin path without replacing user-selected ZIP/directory packs.

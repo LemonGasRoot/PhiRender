@@ -12,7 +12,7 @@ The converter includes code and conversion behavior derived from RPEN/Re:PhiEdit
 
 ## PhiVideo
 
-PhiVideo source is MIT-licensed. It was inspected as a rendering reference; PhiRender does not bundle its source or its `resources/` assets. The PhiVideo project states that those assets belong to Nanjing Pigeonplay Network Co., Ltd. See [PhiVideo](https://github.com/phigrostl/PhiVideo).
+PhiVideo source is MIT-licensed. It was inspected as a rendering reference; the native engine includes source-aligned portions retaining the MIT terms at `vendor-snapshots/phi-recorder/source/LICENSE-PhiVideo-MIT.txt`. PhiRender does not bundle PhiVideo `resources/` assets. The PhiVideo project states that those assets belong to Nanjing Pigeonplay Network Co., Ltd. See [PhiVideo](https://github.com/phigrostl/PhiVideo).
 
 ## Fonts and skins
 
@@ -31,6 +31,8 @@ PhiVideo source is MIT-licensed. It was inspected as a rendering reference; PhiR
 - FFmpeg is an external runtime dependency and retains the license of the build selected by the user or distributor. A release package must identify the exact FFmpeg build and comply with its configuration-specific license.
 
 
-## Phi-recorder local development integration
+## Phi-recorder engine integration
 
-The dual-engine desktop build can use RyderLyx/phi-recorder at the pinned revision in `vendor-snapshots/phi-recorder/BASE_COMMIT.txt`, with the recorded local patches. The upstream checkout has no standalone LICENSE; its README references licenses of source-derived components but does not explicitly license every original upstream contribution. The current integration is for local development. Confirm the upstream grant before a public combined release. The local runtime package can contain existing/user-provided assets; it must not be treated as the previously audited public distribution.
+Source: https://github.com/RyderLyx/phi-recorder, pinned in `vendor-snapshots/phi-recorder/BASE_COMMIT.txt`. On 2026-11-08, the PhiRender project owner explicitly confirmed authorization from the upstream author to distribute the relevant engine code with PhiRender under GPL-3.0-only. The owner retains permission evidence; the upstream snapshot itself has no standalone LICENSE. This permission does not automatically cover separate third-party assets. Local patches and added files are preserved in the snapshot directory.
+
+The public default gameplay skin is the project's CC0 respack-open, selected through the same skin API as user-imported ZIP/directory packs. No official user-imported skin, song, chart, font override or saved user preference is included. Separate RPEN noise shaders/textures keep their original license and notices.

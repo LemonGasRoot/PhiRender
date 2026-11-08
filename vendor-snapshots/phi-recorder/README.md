@@ -3,6 +3,6 @@
 Upstream: https://github.com/RyderLyx/phi-recorder, commit in BASE_COMMIT.txt.
 The tracked upstream changes are in local-changes.patch. New source and regression files are in untracked/; Saira is supplied by the existing project font resource.
 
-The upstream checkout does not contain a standalone LICENSE. Its README identifies source-derived Phira Pro / PhiVideo / RPEN components with their respective notices, but does not grant an explicit blanket license for all original upstream code. This snapshot is for the authorized local development integration. Obtain clarification from the upstream author before publishing a combined release; do not assume the project GPL label resolves that missing grant.
+The pinned upstream checkout has no standalone LICENSE. On 2026-11-08, the PhiRender project owner explicitly confirmed that the phi-recorder author granted permission to publish the relevant engine code with PhiRender under GPL-3.0-only. This project-specific grant covers code, not an automatic relicensing of third-party images, audio, fonts or shader resources. The project owner retains the underlying permission evidence. See THIRD_PARTY_NOTICES.md for separate resource terms.
 
 User-provided skins and official game artwork are not included here. The local runtime build may use the user's installed resources.
