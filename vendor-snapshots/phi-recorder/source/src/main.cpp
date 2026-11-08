@@ -24,7 +24,7 @@
 
 namespace {
 
-static const char* kVersion = "1.1.1";
+static const char* kVersion = "2.0.0";
 
 struct Args {
     std::string chart;

@@ -351,9 +351,18 @@ index f3f1169..ea00cac 100644
      // "yuv420p" (top-down planes produced by the renderer, no filter needed).
      std::string pipeFormat = "nv12";
 diff --git a/src/main.cpp b/src/main.cpp
-index 2cdb0f1..51e317d 100644
+index 2cdb0f1..c4bb21d 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
+@@ -24,7 +24,7 @@
+ 
+ namespace {
+ 
+-static const char* kVersion = "1.1.1";
++static const char* kVersion = "2.0.0";
+ 
+ struct Args {
+     std::string chart;
 @@ -36,6 +36,8 @@ struct Args {
      std::string video;    // when set, encode an MP4 with ffmpeg
      std::string audio;    // optional audio track for the video

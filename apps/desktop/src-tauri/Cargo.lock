@@ -2438,7 +2438,7 @@ dependencies = [
 
 [[package]]
 name = "phigros-rpen-converter"
-version = "0.1.0"
+version = "1.0.0-release"
 dependencies = [
  "anyhow",
  "clap",
@@ -2450,7 +2450,7 @@ dependencies = [
 
 [[package]]
 name = "phirender-desktop"
-version = "0.1.0"
+version = "1.0.0-release"
 dependencies = [
  "anyhow",
  "phigros-rpen-converter",
